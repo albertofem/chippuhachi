@@ -1,0 +1,5 @@
+[requires]
+vulkan-headers/1.2.135.0
+
+[generators]
+cmake
