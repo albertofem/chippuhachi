@@ -1,5 +1,6 @@
 [requires]
 vulkan-headers/1.2.135.0
+catch2/2.12.1
 
 [generators]
 cmake
