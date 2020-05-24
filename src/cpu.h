@@ -3,14 +3,15 @@
 
 
 class cpu {
-public:
     unsigned short opcode;
     unsigned char V[16];
     unsigned short I;
     unsigned short pc;
+public:
+    cpu() = default;
 
-    cpu();
     void init();
+
     void cycle();
 };
 

@@ -12,4 +12,13 @@ SCENARIO("rom can be loaded") {
             REQUIRE(result);
         }
     }
+
+    GIVEN("an invalid rom file (non existant)") {
+        auto filePath = "idontexist";
+
+        WHEN("the rom is loaded") {
+            auto result = c8mem->loadRom(filePath);
+            REQUIRE(result == false);
+        }
+    }
 }

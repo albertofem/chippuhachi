@@ -1,3 +1,6 @@
+include(../build/conanbuildinfo.cmake)
+conan_basic_setup()
+
 set(UNIT_TEST_LIST
         mem)
 
