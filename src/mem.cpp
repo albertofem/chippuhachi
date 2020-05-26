@@ -60,3 +60,11 @@ bool mem::loadRom(const char *file_path) {
 
     return true;
 }
+
+unsigned short mem::read(unsigned short address) {
+    return memory[address];
+}
+
+void mem::write(unsigned short address, unsigned short value) {
+    memory[address] = value;
+}

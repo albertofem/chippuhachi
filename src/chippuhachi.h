@@ -14,10 +14,15 @@ class chippuhachi : public system {
     cpu *cpu = new class cpu();
     gpu *gpu = new class gpu();
 
+    bool started;
+    bool romLoaded;
+
 public:
     chippuhachi();
     void init() override;
     bool step() override;
+    bool loadRom(const char *file_path) override;
+    void start() override;
 };
 
 

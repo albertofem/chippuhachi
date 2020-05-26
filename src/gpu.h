@@ -4,13 +4,14 @@
 #include <cstdint>
 
 class gpu {
-    static unsigned int const MAX_VIDEO_MEMORY = 64 * 32;
+    static unsigned int const MAX_VIDEO_MEMORY = 2048;
 
-    uint8_t graphics_memory[MAX_VIDEO_MEMORY];
+    unsigned short graphics_memory[MAX_VIDEO_MEMORY];
 
 public:
     gpu() = default;
     void init();
+    void clear();
 };
 
 

@@ -9,10 +9,38 @@ void chippuhachi::init() {
     spdlog::get("c8")->info("Running　チップ８!");
 
     mem->init();
-    cpu->init();
     gpu->init();
+
+    cpu->init(mem, gpu);
 }
 
 bool chippuhachi::step() {
-    return false;
+    if (!started)
+    {
+        return false;
+    }
+
+    if (!romLoaded)
+    {
+        return false;
+    }
+
+    auto mustDraw = cpu->cycle();
+
+    return mustDraw;
+}
+
+bool chippuhachi::loadRom(const char *file_path) {
+    auto result = mem->loadRom(file_path);
+
+    if (!result)
+    {
+        spdlog::get("c8")->error("Unable to load rom");
+    }
+
+    return result;
+}
+
+void chippuhachi::start() {
+    started = true;
 }

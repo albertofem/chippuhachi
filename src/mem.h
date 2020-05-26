@@ -29,12 +29,11 @@ public:
     mem() = default;
 
     void init();
-
     bool loadRom(const char *file_path);
-
     void clearMemory();
-
     void loadFontSet();
+    unsigned short read(unsigned short address);
+    void write(unsigned short address, unsigned short value);
 };
 
 

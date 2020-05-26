@@ -1,10 +1,8 @@
-#include "glfwvulkan.h"
-#include <vulkan/vulkan.h>
-
 #define GLFW_INCLUDE_VULKAN
 
+#include "glfwvulkan.h"
+#include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
-
 #include <vector>
 #include <spdlog/spdlog.h>
 #include <imgui.h>
@@ -33,10 +31,10 @@ static void imgUiCheckError(VkResult vkResult) {
         return;
     }
 
-    spdlog::error("Error returned from imgui: VkResult = %d\n", vkResult);
+    spdlog::error("Error returned from imgui: VkResult: {}", vkResult);
 }
 
-videobackendResult *glfwvulkan::run(class system* emulatedSystem) {
+videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
     std::vector<const char *> instanceLayers = {};
     std::vector<const char *> instanceExtensions = {
             VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
@@ -335,7 +333,10 @@ videobackendResult *glfwvulkan::run(class system* emulatedSystem) {
         ImGui::Begin(u8"チップ「８」", NULL, ImGuiWindowFlags_MenuBar);
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("Rom")) {
-                if (ImGui::MenuItem("Open..", "Ctrl+O")) { /* Do stuff */ }
+                if (ImGui::MenuItem("Open..", "Ctrl+O")) {
+                    // TODO: prompt to pick rom, hardcoded for now
+                    emulatedSystem->loadRom("tests/roms/guess");
+                }
                 ImGui::EndMenu();
             }
             ImGui::EndMenuBar();
@@ -344,8 +345,7 @@ videobackendResult *glfwvulkan::run(class system* emulatedSystem) {
 
         ImGui::Begin("Emulation");
         {
-            if (emulatedSystem->step())
-            {
+            if (emulatedSystem->step()) {
                 // send a frame to draw
             }
         }
