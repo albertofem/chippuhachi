@@ -4,14 +4,36 @@
 void cpu::init(mem *memory_t, class gpu *gpu_t) {
     memory = memory_t;
     gpu = gpu_t;
+
+    program_counter = 0x200;
+    op_code = 0;
+    stack_pointer = 0;
+    index_register = 0;
+
+    for (unsigned short &i : stack) {
+        i = 0;
+    }
+
+    for (unsigned char &i : video_register) {
+        i = 0;
+    }
+
+    for (unsigned short &i : keypad) {
+        i = 0;
+    }
+
+    delay_timer = 0;
+    sound_timer = 0;
+
+    spdlog::get("c8")->info("Reset CPU. Program counter is: {0:x}", program_counter);
 }
 
 bool cpu::cycle() {
-    auto opcode = memory->read(program_counter << 8) + memory->read(program_counter + 1);
+    unsigned short opcode = (memory->read(program_counter) << 8u) + memory->read(program_counter + 1u);
 
-    switch (opcode & 0xF000) {
+    switch (opcode & 0xF000u) {
         case 0x0000:
-            return handlex0000(opcode & 0x000F);
+            return handlex0000(opcode & 0x000Fu);
 
         case 0x1000:
             return handlex1000(opcode);
@@ -57,8 +79,9 @@ bool cpu::cycle() {
 
         case 0xF000:
             return handlexF000(opcode);
-
     }
+
+    return false;
 }
 
 bool cpu::handlex0000(unsigned short opcode) {
@@ -75,7 +98,7 @@ bool cpu::handlex0000(unsigned short opcode) {
             break;
 
         default:
-            spdlog::error("Unknown opcode: {}", opcode);
+            spdlog::error("Unknown opcode: 0x{0:b} - 0x{0:x}", opcode, opcode);
             return false;
     }
 
@@ -83,20 +106,20 @@ bool cpu::handlex0000(unsigned short opcode) {
 }
 
 bool cpu::handlex1000(unsigned short opcode) {
-    program_counter = opcode & 0x0FFF;
+    program_counter = opcode & 0x0FFFu;
     return false;
 }
 
 bool cpu::handlex2000(unsigned short opcode) {
     stack[stack_pointer] = program_counter;
     ++stack_pointer;
-    program_counter = opcode & 0x0FFF;
+    program_counter = opcode & 0x0FFFu;
 
     return false;
 }
 
 bool cpu::handlex3000(unsigned short opcode) {
-    if (video_register[(opcode & 0x0F00) >> 8] == (opcode & 0x00FF)) {
+    if (video_register[(opcode & 0x0F00u) >> 8u] == (opcode & 0x00FFu)) {
         program_counter += 4;
     } else {
         program_counter += 2;
@@ -106,7 +129,7 @@ bool cpu::handlex3000(unsigned short opcode) {
 }
 
 bool cpu::handlex4000(unsigned short opcode) {
-    if (video_register[(opcode & 0x0F00) >> 8] != (opcode & 0x00FF)) {
+    if (video_register[(opcode & 0x0F00u) >> 8u] != (opcode & 0x00FFu)) {
         program_counter += 4;
     } else {
         program_counter += 2;
@@ -116,39 +139,116 @@ bool cpu::handlex4000(unsigned short opcode) {
 }
 
 bool cpu::handlex5000(unsigned short opcode) {
+    if (video_register[(opcode & 0x0F00u) >> 8u] == (opcode & 0x00FFu)) {
+        program_counter += 4;
+    } else {
+        program_counter += 2;
+    }
+
     return false;
 }
 
 bool cpu::handlex6000(unsigned short opcode) {
+    video_register[(opcode & 0x0F00u) >> 8u] = opcode & 0x00FFu;
+    program_counter += 2;
+
     return false;
 }
 
 bool cpu::handlex7000(unsigned short opcode) {
+    video_register[(opcode & 0x0F00u) >> 8u] += opcode & 0x00FFu;
+    program_counter += 2;
+
     return false;
 }
 
 bool cpu::handlex8000(unsigned short opcode) {
+    switch (opcode & 0x000Fu) {
+
+        case 0x0000:
+            video_register[(opcode & 0x0F00u) >> 8u] = video_register[(opcode & 0x00F0u) >> 4u];
+
+        case 0x0001:
+            video_register[(opcode & 0x0F00u) >> 8u] |= video_register[(opcode & 0x00F0u) >> 4u];
+
+        case 0x0002:
+            video_register[(opcode & 0x0F00u) >> 8u] &= video_register[(opcode & 0x00F0u) >> 4u];
+
+        case 0x0003:
+            video_register[(opcode & 0x0F00u) >> 8u] ^= video_register[(opcode & 0x00F0u) >> 4u];
+
+        case 0x0004:
+            video_register[(opcode & 0x0F00u) >> 8u] += video_register[(opcode & 0x00F0u) >> 4u];
+
+            if (video_register[(opcode & 0x00F0u) >> 4u] > (0xFF - video_register[(opcode & 0x0F00u) >> 8u])) {
+                video_register[0xF] = 1;
+            } else {
+                video_register[0xF] = 0;
+            }
+
+        case 0x0005:
+            if (video_register[(opcode & 0x00F0u) >> 4u] > video_register[(opcode & 0x0F00u) >> 8u]) {
+                video_register[0xF] = 0;
+            } else {
+                video_register[0xF] = 1;
+            }
+
+            video_register[(opcode & 0x0F00u) >> 8u] -= video_register[(opcode & 0x00F0u) >> 4u];
+
+        case 0x0006:
+            video_register[0xF] = video_register[(opcode & 0x0F00u) >> 8u] & 0x1u;
+            video_register[(opcode & 0x0F00u) >> 8u] >>= 1u;
+
+        case 0x0007:
+            if (video_register[(opcode & 0x0F00u) >> 8u] > video_register[(opcode & 0x00F0u) >> 4u]) {
+                video_register[0xF] = 0;
+            } else {
+                video_register[0xF] = 1;
+            }
+
+            video_register[(opcode & 0x0F00u) >> 8u] =
+                    video_register[(opcode & 0x00F0u) >> 4u] - video_register[(opcode & 0x0F00u) >> 8u];
+
+        case 0x000E:
+            video_register[0xF] = video_register[(opcode & 0x0F00u) >> 8u] >> 7u;
+            video_register[(opcode & 0x0F00u) >> 8u] <<= 1u;
+    }
+
+    program_counter += 2;
     return false;
 }
 
 bool cpu::handlex9000(unsigned short opcode) {
+    if (video_register[(opcode & 0x0F00u) >> 8u] != video_register[(opcode & 0x00F0u) >> 4u]) {
+        program_counter += 4;
+    } else {
+        program_counter += 2;
+    }
+
     return false;
 }
 
 bool cpu::handlexA000(unsigned short opcode) {
+    index_register = opcode & 0x0FFFu;
+    program_counter += 2;
+
     return false;
 }
 
 bool cpu::handlexB000(unsigned short opcode) {
+    program_counter = (opcode & 0x0FFFu) + video_register[0];
+
     return false;
 }
 
 bool cpu::handlexC000(unsigned short opcode) {
+    video_register[(opcode & 0x0F00u) >> 8u] = (rand() % (0xFFu + 1)) & (opcode & 0x00FFu);
+    program_counter += 2;
+
     return false;
 }
 
 bool cpu::handlexD000(unsigned short opcode) {
-    return false;
 }
 
 bool cpu::handlexE000(unsigned short opcode) {

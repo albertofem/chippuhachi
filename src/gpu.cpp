@@ -9,3 +9,7 @@ void gpu::clear() {
         i = 0;
     }
 }
+
+void gpu::write(unsigned short address, unsigned short value) {
+    graphics_memory[address] = value;
+}

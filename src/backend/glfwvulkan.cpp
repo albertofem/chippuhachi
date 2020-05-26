@@ -35,14 +35,6 @@ static void imgUiCheckError(VkResult vkResult) {
 }
 
 videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
-    std::vector<const char *> instanceLayers = {};
-    std::vector<const char *> instanceExtensions = {
-            VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
-    };
-    std::vector<const char *> deviceExtensions = {
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    };
-
     glfwInit();
 
     if (glfwVulkanSupported() == GLFW_FALSE) {
@@ -79,7 +71,8 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
     }
 
     auto vkCreateDebugReportCallbackEXT = (PFN_vkCreateDebugReportCallbackEXT) vkGetInstanceProcAddr(
-            vkInstance, "vkCreateDebugReportCallbackEXT"
+            vkInstance,
+            "vkCreateDebugReportCallbackEXT"
     );
 
     if (vkCreateDebugReportCallbackEXT == nullptr) {
@@ -88,7 +81,6 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
     }
 
     VkDebugReportCallbackCreateInfoEXT debugReportCi = {};
-
     debugReportCi.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
     debugReportCi.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT |
                           VK_DEBUG_REPORT_WARNING_BIT_EXT |
@@ -137,13 +129,11 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
         return videobackendResult::createWithError("Non-supported graphics Vulkan family vkDevice found");
     }
 
-    const float priorities[]{1.0f};
-
     VkDeviceQueueCreateInfo deviceQueueCreateInfo{};
     deviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     deviceQueueCreateInfo.queueCount = 1;
     deviceQueueCreateInfo.queueFamilyIndex = graphicsQueueFamily;
-    deviceQueueCreateInfo.pQueuePriorities = priorities;
+    deviceQueueCreateInfo.pQueuePriorities = VULKAN_QUEUE_PRIORITIES;
 
     VkDeviceCreateInfo deviceCreateInfo{};
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -209,17 +199,19 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
 
     imgUiWindowPtr->Surface = vkSurfaceKhr;
 
-    VkBool32 res;
-    vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, graphicsQueueFamily, imgUiWindowPtr->Surface, &res);
+    VkBool32 vkBoolResult;
+    vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, graphicsQueueFamily, imgUiWindowPtr->Surface, &vkBoolResult);
 
-    if (res != VK_TRUE) {
+    if (vkBoolResult != VK_TRUE) {
         glfwTerminate();
         return videobackendResult::createWithError("Error no WSI support on physical vkDevice 0");
     }
 
     const VkFormat requestSurfaceImageFormat[] = {
-            VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
-            VK_FORMAT_B8G8R8_UNORM, VK_FORMAT_R8G8B8_UNORM
+            VK_FORMAT_B8G8R8A8_UNORM,
+            VK_FORMAT_R8G8B8A8_UNORM,
+            VK_FORMAT_B8G8R8_UNORM,
+            VK_FORMAT_R8G8B8_UNORM
     };
 
     const VkColorSpaceKHR requestSurfaceColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
@@ -270,9 +262,6 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
     (void) io;
 
     ImGui::StyleColorsDark();
-
-    VkPipelineCache vkPipelineCache = VK_NULL_HANDLE;
-
     ImGui_ImplGlfw_InitForVulkan(window, true);
 
     ImGui_ImplVulkan_InitInfo init_info = {};
@@ -290,8 +279,12 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
 
     ImGui_ImplVulkan_Init(&init_info, imgUiWindowPtr->RenderPass);
 
-    auto result = io.Fonts->AddFontFromFileTTF("resources/NotoSansCJKjp-Medium.otf", 20.0f, NULL,
-                                               io.Fonts->GetGlyphRangesJapanese());
+    auto result = io.Fonts->AddFontFromFileTTF(
+            "resources/NotoSansCJKjp-Medium.otf",
+            20.0f,
+            nullptr,
+            io.Fonts->GetGlyphRangesJapanese()
+    );
 
     if (result == nullptr) {
         return videobackendResult::createWithError("Unable to load Japanese font set");
@@ -330,12 +323,13 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        ImGui::Begin(u8"チップ「８」", NULL, ImGuiWindowFlags_MenuBar);
+        ImGui::Begin(u8"チップ「８」", nullptr, ImGuiWindowFlags_MenuBar);
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("Rom")) {
                 if (ImGui::MenuItem("Open..", "Ctrl+O")) {
                     // TODO: prompt to pick rom, hardcoded for now
                     emulatedSystem->loadRom("tests/roms/guess");
+                    emulatedSystem->start();
                 }
                 ImGui::EndMenu();
             }
@@ -346,7 +340,13 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
         ImGui::Begin("Emulation");
         {
             if (emulatedSystem->step()) {
-                // send a frame to draw
+                VkDeviceSize imageSize = emulatedSystem->renderWidth() * emulatedSystem->renderHeight() * 4;
+
+                auto imageBuffer = createVertexBuffer(imageSize);
+
+                auto image = (ImTextureID) ImGui_ImplVulkan_AddTexture(vksampler, vkimageview, vkimagelayout);
+
+                ImGui::Image(image, ImVec2(emulatedSystem->renderWidth(), emulatedSystem->renderHeight()));
             }
         }
         ImGui::End();
@@ -503,6 +503,78 @@ videobackendResult *glfwvulkan::imgUiFrameRender() {
     }
 
     return videobackendResult::createSuccessful();
+}
+
+uint32_t
+glfwvulkan::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties, VkPhysicalDevice vkPhysicalDevice) {
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(vkPhysicalDevice, &memProperties);
+
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if ((typeFilter & (1u << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+}
+
+void glfwvulkan::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+                              VkBuffer &buffer, VkDeviceMemory &bufferMemory) {
+
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateBuffer(vkDevice, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create buffer!");
+    }
+
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(vkDevice, buffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+
+    if (vkAllocateMemory(vkDevice, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate buffer memory!");
+    }
+
+    vkBindBufferMemory(vkDevice, buffer, bufferMemory, 0);
+}
+
+VkBuffer glfwvulkan::createVertexBuffer(VkDeviceSize bufferSize, unsigned short pixelData[]) {
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+
+    createBuffer(
+            bufferSize,
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer, stagingBufferMemory
+    );
+
+    VkBufferCreateInfo vkBufferInfo{};
+    vkBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    vkBufferInfo.size = bufferSize;
+    vkBufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    vkBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    void *data;
+    vkMapMemory(vkDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, pixelData, (size_t) bufferSize);
+    vkUnmapMemory(vkDevice, stagingBufferMemory);
+
+    createBuffer(
+            bufferSize,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            vertexBuffer,
+            vertexBufferMemory
+    );
 }
 
 videobackendResult *glfwvulkan::imgUiFramePresent() {

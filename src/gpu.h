@@ -12,6 +12,7 @@ public:
     gpu() = default;
     void init();
     void clear();
+    void write(unsigned short address, unsigned short value);
 };
 
 

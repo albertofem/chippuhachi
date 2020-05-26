@@ -36,7 +36,11 @@ bool chippuhachi::loadRom(const char *file_path) {
     if (!result)
     {
         spdlog::get("c8")->error("Unable to load rom");
+    } else {
+        spdlog::get("c8")->info("Rom '{}' loaded!", file_path);
     }
+
+    romLoaded = result;
 
     return result;
 }
