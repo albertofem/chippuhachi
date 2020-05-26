@@ -2,7 +2,8 @@ set(TARGET_NAME libchippuhachi)
 
 add_library(${TARGET_NAME} chippuhachi.cpp chippuhachi.h cpu.cpp cpu.h mem.cpp mem.h gpu.cpp gpu.h
         backend/videobackend.h backend/videobackend.cpp backend/glfwvulkan.cpp backend/glfwvulkan.h backend/imgui_impl_vulkan.cpp
-        backend/imgui_impl_vulkan.h backend/imgui_impl_glfw.h backend/imgui_impl_glfw.cpp)
+        backend/imgui_impl_vulkan.h backend/imgui_impl_glfw.h backend/imgui_impl_glfw.cpp
+        emulator.h emulator.cpp system.h)
 
 target_include_directories(${TARGET_NAME} INTERFACE ./)
 

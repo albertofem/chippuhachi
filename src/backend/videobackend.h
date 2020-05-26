@@ -2,6 +2,7 @@
 #define CHIPPUHACHI_VIDEOBACKEND_H
 
 #include <string>
+#include "../system.h"
 
 struct videobackendResult {
     bool isSuccess = true;
@@ -27,7 +28,7 @@ public:
 class videobackend {
 public:
     virtual void init(int width, int height, const char* appName) = 0;
-    virtual videobackendResult *run() = 0;
+    virtual videobackendResult *run(class system* emulatedSystem) = 0;
 };
 
 

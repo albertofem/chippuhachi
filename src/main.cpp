@@ -1,7 +1,7 @@
-#include "chippuhachi.h"
+#include "emulator.h"
 
 int main(int argc, char **argv)
 {
-    auto c8 = new chippuhachi();
-    return c8->run();
+    auto emu = new emulator();
+    return emu->run();
 }
