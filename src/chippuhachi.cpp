@@ -48,3 +48,15 @@ bool chippuhachi::loadRom(const char *file_path) {
 void chippuhachi::start() {
     started = true;
 }
+
+unsigned short chippuhachi::renderWidth() {
+    return gpu::WIDTH;
+}
+
+unsigned short chippuhachi::renderHeight() {
+    return gpu::HEIGHT;
+}
+
+std::vector<unsigned short> chippuhachi::pixels() {
+    return gpu->pixels();
+}

@@ -249,12 +249,137 @@ bool cpu::handlexC000(unsigned short opcode) {
 }
 
 bool cpu::handlexD000(unsigned short opcode) {
+    unsigned short x = video_register[(opcode & 0x0F00u) >> 8u];
+    unsigned short y = video_register[(opcode & 0x00F0u) >> 4u];
+    unsigned short height = opcode & 0x000Fu;
+    unsigned short pixel;
+
+    video_register[0xF] = 0;
+    for (int yline = 0; yline < height; yline++) {
+        pixel = memory->read(index_register + yline);
+        for (unsigned short xline = 0; xline < 8; xline++) {
+            if ((pixel & (0x80u >> xline)) != 0) {
+                if (gpu->read((x + xline + ((y + yline) * 64))) == 1) {
+                    video_register[0xF] = 1;
+                }
+
+                auto writeAddress = x + xline + ((y + yline) * 64);
+
+                gpu->write(writeAddress, gpu->read(writeAddress) ^ 1u);
+            }
+        }
+    }
+
+    program_counter += 2;
+
+    return true;
 }
 
 bool cpu::handlexE000(unsigned short opcode) {
+    switch (opcode & 0x00FFu) {
+        case 0x009E:
+            if (keypad[video_register[(opcode & 0x0F00u) >> 8u]] != 0)
+                program_counter += 4;
+            else
+                program_counter += 2;
+            break;
+
+        case 0x00A1:
+            if (keypad[video_register[(opcode & 0x0F00u) >> 8u]] == 0)
+                program_counter += 4;
+            else
+                program_counter += 2;
+            break;
+
+        default:
+            spdlog::error("Unknown op code: {}", opcode);
+    }
+
     return false;
 }
 
 bool cpu::handlexF000(unsigned short opcode) {
+    switch (opcode & 0x00FFu) {
+        case 0x0007:
+            video_register[(opcode & 0x0F00u) >> 8u] = delay_timer;
+            program_counter += 2;
+            break;
+
+        case 0x000A: {
+            bool key_pressed = false;
+
+            for (int i = 0; i < 16; ++i) {
+                if (keypad[i] != 0) {
+                    video_register[(opcode & 0x0F00u) >> 8u] = i;
+                    key_pressed = true;
+                }
+            }
+
+            if (!key_pressed) {
+                return false;
+            }
+
+            program_counter += 2;
+            break;
+        }
+
+        case 0x0015:
+            delay_timer = video_register[(opcode & 0x0F00u) >> 8u];
+            program_counter += 2;
+            break;
+
+        case 0x0018:
+            sound_timer = video_register[(opcode & 0x0F00u) >> 8u];
+            program_counter += 2;
+            break;
+
+        case 0x001E:
+            if (index_register + video_register[(opcode & 0x0F00u) >> 8u] > 0xFFFu) {
+                video_register[0xF] = 1;
+            } else {
+                video_register[0xF] = 0;
+            }
+
+            index_register += video_register[(opcode & 0x0F00u) >> 8u];
+            program_counter += 2;
+
+            break;
+
+        case 0x0029:
+            index_register = video_register[(opcode & 0x0F00u) >> 8u] * 0x5;
+            program_counter += 2;
+
+            break;
+
+        case 0x0033:
+            memory->write(index_register, video_register[(opcode & 0x0F00u) >> 8u] / 100);
+            memory->write(index_register + 1, (video_register[(opcode & 0x0F00u) >> 8u] / 10) % 10);
+            memory->write(index_register + 2, video_register[(opcode & 0x0F00u) >> 8u] % 10);
+
+            program_counter += 2;
+
+            break;
+
+        case 0x0055:
+            for (int i = 0; i <= ((opcode & 0x0F00u) >> 8u); ++i) {
+                memory->write(index_register + i, video_register[i]);
+            }
+
+            index_register += ((opcode & 0x0F00u) >> 8u) + 1;
+            program_counter += 2;
+            break;
+
+        case 0x0065:
+            for (int i = 0; i <= ((opcode & 0x0F00u) >> 8u); ++i)
+                video_register[i] = memory->read(index_register + i);
+
+            index_register += ((opcode & 0x0F00u) >> 8u) + 1;
+            program_counter += 2;
+            break;
+
+        default:
+            spdlog::error("Unknown opcode [0xF000]: 0x%X\n", opcode);
+    }
+
     return false;
 }

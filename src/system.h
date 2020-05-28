@@ -4,11 +4,18 @@
 class system {
 public:
     virtual void init() = 0;
+
     virtual bool step() = 0;
-    virtual bool loadRom(const char* file_path) = 0;
+
+    virtual bool loadRom(const char *file_path) = 0;
+
     virtual void start() = 0;
+
     virtual unsigned short renderWidth() = 0;
+
     virtual unsigned short renderHeight() = 0;
+
+    virtual std::vector<unsigned short> pixels() = 0;
 };
 
 #endif

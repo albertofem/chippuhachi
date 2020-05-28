@@ -14,8 +14,8 @@ class chippuhachi : public system {
     cpu *cpu = new class cpu();
     gpu *gpu = new class gpu();
 
-    bool started;
-    bool romLoaded;
+    bool started{};
+    bool romLoaded{};
 
 public:
     chippuhachi();
@@ -23,6 +23,12 @@ public:
     bool step() override;
     bool loadRom(const char *file_path) override;
     void start() override;
+
+    unsigned short renderWidth() override;
+
+    unsigned short renderHeight() override;
+
+    std::vector<unsigned short> pixels() override;
 };
 
 

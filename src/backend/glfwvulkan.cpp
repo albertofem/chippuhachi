@@ -6,8 +6,16 @@
 #include <vector>
 #include <spdlog/spdlog.h>
 #include <imgui.h>
+#include <valarray>
 #include "imgui_impl_vulkan.h"
 #include "imgui_impl_glfw.h"
+#include "vertex.h"
+#include <glm/glm.hpp>
+
+const std::vector<uint16_t> indices = {
+        0, 1, 2,
+        2, 3, 0
+};
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL
 vkDebugReportFn(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location,
@@ -108,13 +116,13 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
         return videobackendResult::createWithError("Unable to enumerate Vulkan physical devices", vkResult);
     }
 
-    VkPhysicalDevice physicalDevice = gpus[0];
+    vkPhysicalDevice = gpus[0];
 
     uint32_t queueFamilyCount;
-    vkGetPhysicalDeviceQueueFamilyProperties(gpus[0], &queueFamilyCount, nullptr);
+    vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, &queueFamilyCount, nullptr);
 
     std::vector<VkQueueFamilyProperties> familyProperties(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(gpus[0], &queueFamilyCount, familyProperties.data());
+    vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, &queueFamilyCount, familyProperties.data());
 
     uint32_t graphicsQueueFamily = UINT32_MAX;
 
@@ -200,7 +208,7 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
     imgUiWindowPtr->Surface = vkSurfaceKhr;
 
     VkBool32 vkBoolResult;
-    vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, graphicsQueueFamily, imgUiWindowPtr->Surface, &vkBoolResult);
+    vkGetPhysicalDeviceSurfaceSupportKHR(vkPhysicalDevice, graphicsQueueFamily, imgUiWindowPtr->Surface, &vkBoolResult);
 
     if (vkBoolResult != VK_TRUE) {
         glfwTerminate();
@@ -217,7 +225,7 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
     const VkColorSpaceKHR requestSurfaceColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
 
     imgUiWindowPtr->SurfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(
-            physicalDevice,
+            vkPhysicalDevice,
             imgUiWindowPtr->Surface,
             requestSurfaceImageFormat,
             (size_t) IM_ARRAYSIZE(requestSurfaceImageFormat),
@@ -236,7 +244,7 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
     };
 #endif
     imgUiWindowPtr->PresentMode = ImGui_ImplVulkanH_SelectPresentMode(
-            physicalDevice,
+            vkPhysicalDevice,
             imgUiWindowPtr->Surface,
             &presentModes[0],
             IM_ARRAYSIZE(presentModes)
@@ -246,7 +254,7 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
 
     ImGui_ImplVulkanH_CreateWindow(
             vkInstance,
-            physicalDevice,
+            vkPhysicalDevice,
             vkDevice,
             imgUiWindowPtr,
             graphicsQueueFamily,
@@ -264,20 +272,20 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForVulkan(window, true);
 
-    ImGui_ImplVulkan_InitInfo init_info = {};
-    init_info.Instance = vkInstance;
-    init_info.PhysicalDevice = physicalDevice;
-    init_info.Device = vkDevice;
-    init_info.QueueFamily = graphicsQueueFamily;
-    init_info.Queue = vkQueue;
-    init_info.PipelineCache = vkPipelineCache;
-    init_info.DescriptorPool = vkDescriptorPool;
-    init_info.Allocator = vkAllocator;
-    init_info.MinImageCount = MIN_IMAGE_COUNT;
-    init_info.ImageCount = imgUiWindowPtr->ImageCount;
-    init_info.CheckVkResultFn = imgUiCheckError;
+    ImGui_ImplVulkan_InitInfo imgUiInitInfo = {};
+    imgUiInitInfo.Instance = vkInstance;
+    imgUiInitInfo.PhysicalDevice = vkPhysicalDevice;
+    imgUiInitInfo.Device = vkDevice;
+    imgUiInitInfo.QueueFamily = graphicsQueueFamily;
+    imgUiInitInfo.Queue = vkQueue;
+    imgUiInitInfo.PipelineCache = vkPipelineCache;
+    imgUiInitInfo.DescriptorPool = vkDescriptorPool;
+    imgUiInitInfo.Allocator = vkAllocator;
+    imgUiInitInfo.MinImageCount = MIN_IMAGE_COUNT;
+    imgUiInitInfo.ImageCount = imgUiWindowPtr->ImageCount;
+    imgUiInitInfo.CheckVkResultFn = imgUiCheckError;
 
-    ImGui_ImplVulkan_Init(&init_info, imgUiWindowPtr->RenderPass);
+    ImGui_ImplVulkan_Init(&imgUiInitInfo, imgUiWindowPtr->RenderPass);
 
     auto result = io.Fonts->AddFontFromFileTTF(
             "resources/NotoSansCJKjp-Medium.otf",
@@ -297,6 +305,7 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
     spdlog::info("Vulkan/GLFW initialized, starting render loop");
 
     videobackendResult *vbResult = nullptr;
+    ImTextureID imgUiTexture = nullptr;
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -306,7 +315,7 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
             ImGui_ImplVulkan_SetMinImageCount(MIN_IMAGE_COUNT);
             ImGui_ImplVulkanH_CreateWindow(
                     vkInstance,
-                    physicalDevice,
+                    vkPhysicalDevice,
                     vkDevice,
                     &imgUiWindow,
                     graphicsQueueFamily,
@@ -339,14 +348,30 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
 
         ImGui::Begin("Emulation");
         {
+            std::valarray<unsigned short> pixelSum{
+                    emulatedSystem->pixels().data(),
+                    emulatedSystem->pixels().size()
+            };
+
+            ImGui::Text("Pixel sum: %d", pixelSum.sum());
+
             if (emulatedSystem->step()) {
-                VkDeviceSize imageSize = emulatedSystem->renderWidth() * emulatedSystem->renderHeight() * 4;
+                auto pixels = emulatedSystem->pixels();
 
-                auto imageBuffer = createVertexBuffer(imageSize);
-
-                auto image = (ImTextureID) ImGui_ImplVulkan_AddTexture(vksampler, vkimageview, vkimagelayout);
-
-                ImGui::Image(image, ImVec2(emulatedSystem->renderWidth(), emulatedSystem->renderHeight()));
+                for (int i = 0; i < emulatedSystem->renderWidth() * emulatedSystem->renderHeight(); i++) {
+                    if (pixels[i] == 1) {
+                        calculateVertices(
+                                i % emulatedSystem->renderWidth(),
+                                i / emulatedSystem->renderWidth(),
+                                emulatedSystem->renderWidth(),
+                                emulatedSystem->renderHeight(),
+                                emulatedSystem->renderWidth(),
+                                0,
+                                emulatedSystem->renderHeight(),
+                                0
+                        );
+                    }
+                }
             }
         }
         ImGui::End();
@@ -379,6 +404,30 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
     glfwTerminate();
 
     return vbResult == nullptr ? videobackendResult::createSuccessful() : vbResult;
+}
+
+void glfwvulkan::calculateVertices(
+        const unsigned short x,
+        const unsigned short y,
+        unsigned short render_width,
+        unsigned short render_height,
+        unsigned short end_x,
+        unsigned short size_x,
+        unsigned short end_y,
+        unsigned short size_y
+) {
+    int onePixelX = (int) (end_x - size_x) / render_width;
+    int onePixelY = (int) (end_y - size_y) / render_height;
+
+    int scaledX = onePixelX * x;
+    int scaledY = onePixelY * y;
+
+    toDrawVertices = {
+            {{(float) scaledX,                     (float) scaledY},                     {0.0f, 0.0f, 0.0f}},
+            {{(float) scaledX + (float) onePixelX, (float) scaledY},                     {0.0f, 0.0f, 0.0f}},
+            {{(float) scaledX + (float) onePixelX, (float) scaledY + (float) onePixelY}, {0.0f, 0.0f, 0.0f}},
+            {{(float) scaledX,                     (float) scaledY + (float) onePixelY}, {0.0f, 0.0f, 0.0f}}
+    };
 }
 
 void glfwvulkan::init(int t_width, int t_height, const char *t_appName) {
@@ -460,6 +509,10 @@ videobackendResult *glfwvulkan::imgUiFrameRender() {
         }
     }
 
+    if (!toDrawVertices.empty()) {
+        calculateEmulationVertexAndIndices(fd->CommandBuffer);
+    }
+
     {
         VkRenderPassBeginInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -474,6 +527,16 @@ videobackendResult *glfwvulkan::imgUiFrameRender() {
     }
 
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), fd->CommandBuffer);
+
+    if (!toDrawVertices.empty()) {
+        VkBuffer vertexBuffers[1] = {emulationVertexBuffer};
+        VkDeviceSize offsets[1] = {0};
+
+        vkCmdBindVertexBuffers(fd->CommandBuffer, 0, 1, vertexBuffers, offsets);
+        vkCmdBindIndexBuffer(fd->CommandBuffer, emulationIndexBuffer, 0,
+                             sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(fd->CommandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+    }
 
     vkCmdEndRenderPass(fd->CommandBuffer);
     {
@@ -496,7 +559,6 @@ videobackendResult *glfwvulkan::imgUiFrameRender() {
 
         vkResult = vkQueueSubmit(vkQueue, 1, &info, fd->Fence);
 
-
         if (vkResult < 0) {
             return videobackendResult::createWithError("Failed to submit queue", vkResult);
         }
@@ -505,8 +567,19 @@ videobackendResult *glfwvulkan::imgUiFrameRender() {
     return videobackendResult::createSuccessful();
 }
 
+void glfwvulkan::calculateEmulationVertexAndIndices(VkCommandBuffer commandBuffer) {
+    createVertexBuffer(
+            commandBuffer,
+            toDrawVertices,
+            emulationVertexBuffer,
+            vertexMemoryBuffer
+    );
+
+    createIndexBuffer(commandBuffer, emulationIndexBuffer, indexMemoryBuffer);
+}
+
 uint32_t
-glfwvulkan::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties, VkPhysicalDevice vkPhysicalDevice) {
+glfwvulkan::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
     VkPhysicalDeviceMemoryProperties memProperties;
     vkGetPhysicalDeviceMemoryProperties(vkPhysicalDevice, &memProperties);
 
@@ -515,6 +588,55 @@ glfwvulkan::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties
             return i;
         }
     }
+}
+
+void
+glfwvulkan::createVertexBuffer(VkCommandBuffer commandBuffer, std::vector<Vertex> vertices, VkBuffer &vertexBuffer,
+                               VkDeviceMemory &vertexBufferMemory) {
+    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer,
+                 stagingBufferMemory);
+
+    void *data;
+    vkMapMemory(vkDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, vertices.data(), (size_t) bufferSize);
+    vkUnmapMemory(vkDevice, stagingBufferMemory);
+
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
+
+    copyBuffer(commandBuffer, stagingBuffer, vertexBuffer, bufferSize);
+
+    vkDestroyBuffer(vkDevice, stagingBuffer, nullptr);
+    vkFreeMemory(vkDevice, stagingBufferMemory, nullptr);
+}
+
+void
+glfwvulkan::createIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer &indexBuffer, VkDeviceMemory &indexBufferMemory) {
+    VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer,
+                 stagingBufferMemory);
+
+    void *data;
+    vkMapMemory(vkDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, indices.data(), (size_t) bufferSize);
+    vkUnmapMemory(vkDevice, stagingBufferMemory);
+
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
+
+    copyBuffer(commandBuffer, stagingBuffer, indexBuffer, bufferSize);
+
+    vkDestroyBuffer(vkDevice, stagingBuffer, nullptr);
+    vkFreeMemory(vkDevice, stagingBufferMemory, nullptr);
 }
 
 void glfwvulkan::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
@@ -545,36 +667,10 @@ void glfwvulkan::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMem
     vkBindBufferMemory(vkDevice, buffer, bufferMemory, 0);
 }
 
-VkBuffer glfwvulkan::createVertexBuffer(VkDeviceSize bufferSize, unsigned short pixelData[]) {
-
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-
-    createBuffer(
-            bufferSize,
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            stagingBuffer, stagingBufferMemory
-    );
-
-    VkBufferCreateInfo vkBufferInfo{};
-    vkBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    vkBufferInfo.size = bufferSize;
-    vkBufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    vkBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    void *data;
-    vkMapMemory(vkDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, pixelData, (size_t) bufferSize);
-    vkUnmapMemory(vkDevice, stagingBufferMemory);
-
-    createBuffer(
-            bufferSize,
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            vertexBuffer,
-            vertexBufferMemory
-    );
+void glfwvulkan::copyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+    VkBufferCopy copyRegion{};
+    copyRegion.size = size;
+    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 }
 
 videobackendResult *glfwvulkan::imgUiFramePresent() {

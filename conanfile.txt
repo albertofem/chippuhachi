@@ -3,6 +3,7 @@ vulkan-headers/1.2.135.0
 catch2/2.12.1
 spdlog/1.6.0
 imgui/1.76
+glm/0.9.9.8
 
 [generators]
 cmake
