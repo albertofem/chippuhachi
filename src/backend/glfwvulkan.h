@@ -24,6 +24,8 @@ class glfwvulkan : public videobackend {
             VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     };
 
+    uint32_t graphicsQueueFamily = UINT32_MAX;
+
     // Vulkan structs
     VkInstance vkInstance = VK_NULL_HANDLE;
     VkDevice vkDevice = VK_NULL_HANDLE;
@@ -56,11 +58,15 @@ class glfwvulkan : public videobackend {
     videobackendResult *imgUiUploadFonts();
 
     std::vector<Vertex> toDrawVertices;
-    VkBuffer emulationVertexBuffer = nullptr;
-    VkBuffer emulationIndexBuffer = nullptr;
-    VkDeviceMemory vertexMemoryBuffer = nullptr;
-    VkDeviceMemory indexMemoryBuffer = nullptr;
 
+    void* emulationPixelBufferData;
+    VkCommandBuffer emulationCommandBuffer;
+    VkBuffer emulationPixelBuffer;
+    VkDeviceMemory emulationPixelMemoryBuffer;
+    VkDeviceSize emulationPixelBufferSize;
+    VkImage emulationPixelImage;
+    VkImageView emulationPixelImageView;
+    VkSampler emulationPixelImageSampler;
 
 public:
     videobackendResult *run(class system *system) override;
@@ -69,22 +75,15 @@ public:
 
     void glfwResizeCallback(GLFWwindow *, int width, int height);
 
-    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer &buffer,
-                      VkDeviceMemory &bufferMemory);
-
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
-    void createIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer &indexBuffer, VkDeviceMemory &indexBufferMemory);
+    bool createEmulationPixelBuffer(unsigned short width_t, unsigned short height_t);
 
-    void calculateVertices(unsigned short x, unsigned short y, unsigned short render_width,
-                                          unsigned short render_height, unsigned short end_x, unsigned short size_x,
-                                          unsigned short end_y, unsigned short size_y);
+    bool createEmulationPixelImage(unsigned short width_t, unsigned short height_t);
 
-    void createVertexBuffer(VkCommandBuffer commandBuffer, std::vector<Vertex> vertices, VkBuffer &vertexBuffer, VkDeviceMemory &vertexBufferMemory);
+    bool registerImageBufferCommands(unsigned short width_t, unsigned short height_t);
 
-    void copyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
-
-    void calculateEmulationVertexAndIndices(VkCommandBuffer commandBuffer);
+    bool createImage(VkImage &image, unsigned short width_t, unsigned short height_t);
 };
 
 
