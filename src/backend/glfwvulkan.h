@@ -10,10 +10,13 @@
 #include "vertex.h"
 
 class glfwvulkan : public videobackend {
+    const int EMULATION_WINDOW_PADDING = 30;
     const int MIN_IMAGE_COUNT = 2;
     const float VULKAN_QUEUE_PRIORITIES[1]{
             1.0f
     };
+
+    const ImVec4 CLEAR_COLOR = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     // Vulkan init config
     std::vector<const char *> instanceLayers = {};
@@ -42,8 +45,11 @@ class glfwvulkan : public videobackend {
     ImGui_ImplVulkanH_Window imgUiWindow;
     ImGui_ImplVulkanH_Window *imgUiWindowPtr = &imgUiWindow;
 
-    int width{};
-    int height{};
+    int windowWidth{};
+    int windowHeight{};
+
+    unsigned short emulationWindowWidth{};
+    unsigned short emulationWindowHeight{};
 
     const char *appName{};
 
@@ -57,21 +63,27 @@ class glfwvulkan : public videobackend {
 
     videobackendResult *imgUiUploadFonts();
 
-    std::vector<Vertex> toDrawVertices;
-
-    void* emulationPixelBufferData;
+    // emulation render data
+    void *emulationPixelBufferData;
     VkCommandBuffer emulationCommandBuffer;
-    VkBuffer emulationPixelBuffer;
-    VkDeviceMemory emulationPixelMemoryBuffer;
+
     VkDeviceSize emulationPixelBufferSize;
+    VkBuffer emulationPixelBuffer;
+
+    VkDeviceMemory emulationPixelMemoryBuffer;
+    VkDeviceMemory emulationPixelScaledMemoryBuffer;
+
     VkImage emulationPixelImage;
+    VkImage emulationScaledPixelImage;
+
+    // for imgui
     VkImageView emulationPixelImageView;
     VkSampler emulationPixelImageSampler;
 
 public:
     videobackendResult *run(class system *system) override;
 
-    void init(int width, int height, const char *t_appName) override;
+    void init(int width, int height, const char *appName_t) override;
 
     void glfwResizeCallback(GLFWwindow *, int width, int height);
 
@@ -81,9 +93,34 @@ public:
 
     bool createEmulationPixelImage(unsigned short width_t, unsigned short height_t);
 
-    bool registerImageBufferCommands(unsigned short width_t, unsigned short height_t);
+    bool createEmulationPixelScaledImage(unsigned short width_t, unsigned short height_t);
 
-    bool createImage(VkImage &image, unsigned short width_t, unsigned short height_t);
+    videobackendResult * registerImageBufferCommands(unsigned short width_t, unsigned short height_t);
+
+    bool createImage(unsigned short width_t, unsigned short height_t);
+
+    void initializeDeviceQueue(const std::vector<VkPhysicalDevice> &gpus);
+
+    VkResult initializeVulkan();
+
+    void initializeQueueFamily();
+
+    VkResult initializeDescriptorPool();
+
+    void initializeImGui(GLFWwindow *window);
+
+    static ImFont *loadImGuiJapaneseFont(ImGuiIO &io);
+
+    static void createPipelineBarrier(VkCommandBuffer
+                               commandBuffer,
+                               VkPipelineStageFlags srcStage, VkPipelineStageFlags
+                               dstStage,
+                               std::vector<VkMemoryBarrier> memoryBarries, std::vector<VkBufferMemoryBarrier>
+                               bufferBarries,
+                               std::vector<VkImageMemoryBarrier> imageBarriers
+    );
+
+    videobackendResult *initializeCommandBuffer(VkCommandBuffer &vkCommandBuffer);
 };
 
 

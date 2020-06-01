@@ -12,11 +12,6 @@
 #include "vertex.h"
 #include <glm/glm.hpp>
 
-const std::vector<uint16_t> indices = {
-        0, 1, 2,
-        2, 3, 0
-};
-
 static VKAPI_ATTR VkBool32 VKAPI_CALL
 vkDebugReportFn(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location,
                 int32_t messageCode, const char *pLayerPrefix, const char *pMessage, void *pUserData) {
@@ -59,47 +54,10 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
 
     VkResult vkResult;
 
-    VkApplicationInfo vkApplicationInfo{};
-    vkApplicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    vkApplicationInfo.pApplicationName = appName;
-    vkApplicationInfo.pEngineName = appName;
-
-    VkInstanceCreateInfo vkInstanceCreateInfo{};
-    vkInstanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    vkInstanceCreateInfo.pApplicationInfo = &vkApplicationInfo;
-    vkInstanceCreateInfo.enabledLayerCount = instanceLayers.size();
-    vkInstanceCreateInfo.ppEnabledLayerNames = instanceLayers.data();
-    vkInstanceCreateInfo.enabledExtensionCount = instanceExtensions.size();
-    vkInstanceCreateInfo.ppEnabledExtensionNames = instanceExtensions.data();
-
-    vkResult = vkCreateInstance(&vkInstanceCreateInfo, vkAllocator, &vkInstance);
+    vkResult = initializeVulkan();
 
     if (vkResult < 0) {
         return videobackendResult::createWithError("Unable to create Vulkan instance", vkResult);
-    }
-
-    auto vkCreateDebugReportCallbackEXT = (PFN_vkCreateDebugReportCallbackEXT) vkGetInstanceProcAddr(
-            vkInstance,
-            "vkCreateDebugReportCallbackEXT"
-    );
-
-    if (vkCreateDebugReportCallbackEXT == nullptr) {
-        return videobackendResult::createWithError(
-                "Unable to register debug callback function, maybe extension is not enabled?");
-    }
-
-    VkDebugReportCallbackCreateInfoEXT debugReportCi = {};
-    debugReportCi.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-    debugReportCi.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT |
-                          VK_DEBUG_REPORT_WARNING_BIT_EXT |
-                          VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
-    debugReportCi.pfnCallback = vkDebugReportFn;
-    debugReportCi.pUserData = nullptr;
-
-    vkResult = vkCreateDebugReportCallbackEXT(vkInstance, &debugReportCi, vkAllocator, &vkDebugReport);
-
-    if (vkResult < 0) {
-        return videobackendResult::createWithError("Unable to register debug report", vkResult);
     }
 
     uint32_t gpuCount;
@@ -118,62 +76,16 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
 
     vkPhysicalDevice = gpus[0];
 
-    uint32_t queueFamilyCount;
-    vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, &queueFamilyCount, nullptr);
-
-    std::vector<VkQueueFamilyProperties> familyProperties(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, &queueFamilyCount, familyProperties.data());
-
-    for (uint32_t i = 0; i < queueFamilyCount; ++i) {
-        if (familyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            graphicsQueueFamily = i;
-        }
-    }
+    initializeQueueFamily();
 
     if (graphicsQueueFamily == UINT32_MAX) {
         glfwTerminate();
         return videobackendResult::createWithError("Non-supported graphics Vulkan family vkDevice found");
     }
 
-    VkDeviceQueueCreateInfo deviceQueueCreateInfo{};
-    deviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    deviceQueueCreateInfo.queueCount = 1;
-    deviceQueueCreateInfo.queueFamilyIndex = graphicsQueueFamily;
-    deviceQueueCreateInfo.pQueuePriorities = VULKAN_QUEUE_PRIORITIES;
+    initializeDeviceQueue(gpus);
 
-    VkDeviceCreateInfo deviceCreateInfo{};
-    deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    deviceCreateInfo.queueCreateInfoCount = 1;
-    deviceCreateInfo.pQueueCreateInfos = &deviceQueueCreateInfo;
-    deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
-    deviceCreateInfo.enabledExtensionCount = deviceExtensions.size();
-
-    vkCreateDevice(gpus[0], &deviceCreateInfo, vkAllocator, &vkDevice);
-    vkGetDeviceQueue(vkDevice, graphicsQueueFamily, 0, &vkQueue);
-
-    VkDescriptorPoolSize poolSizes[] = {
-            {VK_DESCRIPTOR_TYPE_SAMPLER,                1000},
-            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
-            {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,          1000},
-            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          1000},
-            {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,   1000},
-            {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,   1000},
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         1000},
-            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,         1000},
-            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
-            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
-            {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,       1000}
-    };
-
-    VkDescriptorPoolCreateInfo poolInfo = {};
-
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    poolInfo.maxSets = 1000 * IM_ARRAYSIZE(poolSizes);
-    poolInfo.poolSizeCount = (uint32_t) IM_ARRAYSIZE(poolSizes);
-    poolInfo.pPoolSizes = poolSizes;
-
-    vkResult = vkCreateDescriptorPool(vkDevice, &poolInfo, vkAllocator, &vkDescriptorPool);
+    vkResult = initializeDescriptorPool();
 
     if (vkResult < 0) {
         glfwTerminate();
@@ -185,11 +97,11 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
             GLFW_NO_API
     );
 
-    auto window = glfwCreateWindow(width, height, appName, nullptr, nullptr);
+    auto window = glfwCreateWindow(windowWidth, windowHeight, appName, nullptr, nullptr);
 
     glfwSetWindowUserPointer(window, this);
 
-    glfwGetFramebufferSize(window, &width, &height);
+    glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
 
     glfwSetFramebufferSizeCallback(window, [](GLFWwindow *window, int h, int w) {
         auto &self = *static_cast<glfwvulkan *>(glfwGetWindowUserPointer(window));
@@ -257,8 +169,8 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
             imgUiWindowPtr,
             graphicsQueueFamily,
             vkAllocator,
-            width,
-            height,
+            windowWidth,
+            windowHeight,
             MIN_IMAGE_COUNT
     );
 
@@ -268,38 +180,15 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
     ImGuiIO &io = ImGui::GetIO();
     (void) io;
 
-    ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForVulkan(window, true);
+    initializeImGui(window);
 
-    ImGui_ImplVulkan_InitInfo imgUiInitInfo = {};
-    imgUiInitInfo.Instance = vkInstance;
-    imgUiInitInfo.PhysicalDevice = vkPhysicalDevice;
-    imgUiInitInfo.Device = vkDevice;
-    imgUiInitInfo.QueueFamily = graphicsQueueFamily;
-    imgUiInitInfo.Queue = vkQueue;
-    imgUiInitInfo.PipelineCache = vkPipelineCache;
-    imgUiInitInfo.DescriptorPool = vkDescriptorPool;
-    imgUiInitInfo.Allocator = vkAllocator;
-    imgUiInitInfo.MinImageCount = MIN_IMAGE_COUNT;
-    imgUiInitInfo.ImageCount = imgUiWindowPtr->ImageCount;
-    imgUiInitInfo.CheckVkResultFn = imgUiCheckError;
-
-    ImGui_ImplVulkan_Init(&imgUiInitInfo, imgUiWindowPtr->RenderPass);
-
-    auto result = io.Fonts->AddFontFromFileTTF(
-            "resources/NotoSansCJKjp-Medium.otf",
-            20.0f,
-            nullptr,
-            io.Fonts->GetGlyphRangesJapanese()
-    );
+    ImFont *result = loadImGuiJapaneseFont(io);
 
     if (result == nullptr) {
         return videobackendResult::createWithError("Unable to load Japanese font set");
     }
 
     imgUiUploadFonts();
-
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     spdlog::info("Vulkan/GLFW initialized, starting render loop");
 
@@ -317,13 +206,6 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
 
     if (!createPixelImageResult) {
         return videobackendResult::createWithError("Unable to create pixel image");
-    }
-
-    auto registerImageBufferCommandsResult = registerImageBufferCommands(emulatedSystem->renderWidth(),
-                                                                         emulatedSystem->renderHeight());
-
-    if (!registerImageBufferCommandsResult) {
-        return videobackendResult::createWithError("Unable to register commands");
     }
 
     while (!glfwWindowShouldClose(window)) {
@@ -357,7 +239,7 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
                 if (ImGui::MenuItem("Open..", "Ctrl+O")) {
                     // TODO: prompt to pick rom, hardcoded for now
                     spdlog::info("Opening rom");
-                    emulatedSystem->loadRom("tests/roms/guess");
+                    emulatedSystem->loadRom("tests/roms/invaders.rom");
                     emulatedSystem->start();
 
                     imgUiTexture = ImGui_ImplVulkan_AddTexture(emulationPixelImageSampler,
@@ -372,22 +254,30 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
 
         ImGui::Begin("Emulation");
         {
-            std::valarray<unsigned short> pixelSum{
-                    emulatedSystem->pixels().data(),
-                    emulatedSystem->pixels().size()
-            };
+            auto currentWidth = (unsigned short) ImGui::GetWindowWidth();
+            auto currentHeight = (unsigned short) ImGui::GetWindowHeight();
 
-            ImGui::Text("Pixel sum: %d", pixelSum.sum());
+            if (currentWidth != emulationWindowWidth or currentHeight != emulationWindowHeight) {
+                emulationWindowWidth = currentWidth;
+                emulationWindowHeight = currentHeight;
+
+                createEmulationPixelScaledImage(currentWidth, currentHeight);
+                registerImageBufferCommands(emulatedSystem->renderWidth(), emulatedSystem->renderHeight());
+            }
 
             if (emulatedSystem->step()) {
                 auto pixels = emulatedSystem->pixels();
 
                 memset(emulationPixelBufferData, 0, emulationPixelBufferSize);
 
-                for (int i = 0; i < pixels.size(); i++) {
-                    if (pixels[i] == 1) {
-                        auto *pixel = static_cast<unsigned short *>(emulationPixelBufferData) + i;
-                        *pixel = 0xFFFF;
+                for (int y = 0; y < emulatedSystem->renderHeight(); ++y) {
+                    for (int x = 0; x < emulatedSystem->renderWidth(); ++x) {
+                        if (pixels[(y * emulatedSystem->renderWidth()) + x]) {
+                            auto *pixel =
+                                    static_cast<int *>(emulationPixelBufferData) + (y * emulatedSystem->renderWidth()) +
+                                    x;
+                            *pixel = 0xFFFFFFFF;
+                        }
                     }
                 }
             }
@@ -396,8 +286,8 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
                 ImGui::Image(
                         imgUiTexture,
                         ImVec2(
-                                ImGui::GetWindowWidth(),
-                                ImGui::GetWindowHeight()
+                                (float) (currentWidth-EMULATION_WINDOW_PADDING+10),
+                                (float) (currentHeight-EMULATION_WINDOW_PADDING-12)
                         )
                 );
             }
@@ -405,7 +295,7 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
         ImGui::End();
         ImGui::Render();
 
-        memcpy(&imgUiWindowPtr->ClearValue.color.float32[0], &clear_color, 4 * sizeof(float));
+        memcpy(&imgUiWindowPtr->ClearValue.color.float32[0], &CLEAR_COLOR, 4 * sizeof(float));
 
         vbResult = imgUiFrameRender();
 
@@ -434,18 +324,140 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
     return vbResult == nullptr ? videobackendResult::createSuccessful() : vbResult;
 }
 
-void pipeline_barrier(VkCommandBuffer command_buffer, VkPipelineStageFlags src_stage, VkPipelineStageFlags dst_stage,
-                      std::vector<VkMemoryBarrier> memory_barriers, std::vector<VkBufferMemoryBarrier> buffer_barriers,
-                      std::vector<VkImageMemoryBarrier> image_barriers) {
-    vkCmdPipelineBarrier(
-            command_buffer,
-            src_stage, dst_stage, 0, static_cast<unsigned int>(memory_barriers.size()), memory_barriers.data(),
-            static_cast<unsigned int>(buffer_barriers.size()), buffer_barriers.data(),
-            static_cast<unsigned int>(image_barriers.size()), image_barriers.data());
+ImFont *glfwvulkan::loadImGuiJapaneseFont(ImGuiIO &io) {
+    auto result = io.Fonts->AddFontFromFileTTF(
+            "resources/NotoSansCJKjp-Medium.otf",
+            20.0f,
+            nullptr,
+            io.Fonts->GetGlyphRangesJapanese()
+    );
+    return result;
 }
 
-bool glfwvulkan::registerImageBufferCommands(unsigned short width_t, unsigned short height_t) {
-    VkCommandPool command_pool;
+void glfwvulkan::initializeImGui(GLFWwindow *window) {
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForVulkan(window, true);
+
+    ImGui_ImplVulkan_InitInfo imgUiInitInfo = {};
+    imgUiInitInfo.Instance = vkInstance;
+    imgUiInitInfo.PhysicalDevice = vkPhysicalDevice;
+    imgUiInitInfo.Device = vkDevice;
+    imgUiInitInfo.QueueFamily = graphicsQueueFamily;
+    imgUiInitInfo.Queue = vkQueue;
+    imgUiInitInfo.PipelineCache = vkPipelineCache;
+    imgUiInitInfo.DescriptorPool = vkDescriptorPool;
+    imgUiInitInfo.Allocator = vkAllocator;
+    imgUiInitInfo.MinImageCount = MIN_IMAGE_COUNT;
+    imgUiInitInfo.ImageCount = imgUiWindowPtr->ImageCount;
+    imgUiInitInfo.CheckVkResultFn = imgUiCheckError;
+
+    ImGui_ImplVulkan_Init(&imgUiInitInfo, imgUiWindowPtr->RenderPass);
+}
+
+VkResult glfwvulkan::initializeDescriptorPool() {
+    VkResult vkResult;
+    VkDescriptorPoolSize poolSizes[] = {
+            {VK_DESCRIPTOR_TYPE_SAMPLER,                1000},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+            {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,          1000},
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          1000},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,   1000},
+            {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,   1000},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         1000},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,         1000},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
+            {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,       1000}
+    };
+
+    VkDescriptorPoolCreateInfo poolInfo = {};
+
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    poolInfo.maxSets = 1000 * IM_ARRAYSIZE(poolSizes);
+    poolInfo.poolSizeCount = (uint32_t) IM_ARRAYSIZE(poolSizes);
+    poolInfo.pPoolSizes = poolSizes;
+
+    vkResult = vkCreateDescriptorPool(vkDevice, &poolInfo, vkAllocator, &vkDescriptorPool);
+    return vkResult;
+}
+
+void glfwvulkan::initializeQueueFamily() {
+    uint32_t queueFamilyCount;
+    vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, &queueFamilyCount, nullptr);
+
+    std::__1::vector<VkQueueFamilyProperties> familyProperties(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, &queueFamilyCount, familyProperties.data());
+
+    for (uint32_t i = 0; i < queueFamilyCount; ++i) {
+        if (familyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+            graphicsQueueFamily = i;
+        }
+    }
+}
+
+VkResult glfwvulkan::initializeVulkan() {
+    VkResult vkResult;
+    VkApplicationInfo vkApplicationInfo{};
+    vkApplicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    vkApplicationInfo.pApplicationName = appName;
+    vkApplicationInfo.pEngineName = appName;
+
+    VkInstanceCreateInfo vkInstanceCreateInfo{};
+    vkInstanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    vkInstanceCreateInfo.pApplicationInfo = &vkApplicationInfo;
+    vkInstanceCreateInfo.enabledLayerCount = instanceLayers.size();
+    vkInstanceCreateInfo.ppEnabledLayerNames = instanceLayers.data();
+    vkInstanceCreateInfo.enabledExtensionCount = instanceExtensions.size();
+    vkInstanceCreateInfo.ppEnabledExtensionNames = instanceExtensions.data();
+
+    vkResult = vkCreateInstance(&vkInstanceCreateInfo, vkAllocator, &vkInstance);
+    return vkResult;
+}
+
+void glfwvulkan::initializeDeviceQueue(const std::vector<VkPhysicalDevice> &gpus) {
+    VkDeviceQueueCreateInfo deviceQueueCreateInfo{};
+    deviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    deviceQueueCreateInfo.queueCount = 1;
+    deviceQueueCreateInfo.queueFamilyIndex = graphicsQueueFamily;
+    deviceQueueCreateInfo.pQueuePriorities = VULKAN_QUEUE_PRIORITIES;
+
+    VkDeviceCreateInfo deviceCreateInfo{};
+    deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    deviceCreateInfo.queueCreateInfoCount = 1;
+    deviceCreateInfo.pQueueCreateInfos = &deviceQueueCreateInfo;
+    deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
+    deviceCreateInfo.enabledExtensionCount = deviceExtensions.size();
+
+    vkCreateDevice(gpus[0], &deviceCreateInfo, vkAllocator, &vkDevice);
+    vkGetDeviceQueue(vkDevice, graphicsQueueFamily, 0, &vkQueue);
+}
+
+void glfwvulkan::createPipelineBarrier(
+        VkCommandBuffer commandBuffer,
+        VkPipelineStageFlags srcStage,
+        VkPipelineStageFlags dstStage,
+        std::vector<VkMemoryBarrier> memoryBarries,
+        std::vector<VkBufferMemoryBarrier> bufferBarries,
+        std::vector<VkImageMemoryBarrier> imageBarriers
+) {
+    vkCmdPipelineBarrier(
+            commandBuffer,
+            srcStage,
+            dstStage,
+            0,
+            static_cast<unsigned int>(memoryBarries.size()),
+            memoryBarries.data(),
+            static_cast<unsigned int>(bufferBarries.size()),
+            bufferBarries.data(),
+            static_cast<unsigned int>(imageBarriers.size()),
+            imageBarriers.data()
+    );
+}
+
+videobackendResult *glfwvulkan::initializeCommandBuffer(VkCommandBuffer &vkCommandBuffer) {
+    VkResult vkResult;
+    VkCommandPool vkCommandPool;
 
     VkCommandPoolCreateInfo vkCommandPoolCreateInfo;
     vkCommandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -453,19 +465,23 @@ bool glfwvulkan::registerImageBufferCommands(unsigned short width_t, unsigned sh
     vkCommandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     vkCommandPoolCreateInfo.queueFamilyIndex = graphicsQueueFamily;
 
-    if (vkCreateCommandPool(vkDevice, &vkCommandPoolCreateInfo, nullptr, &command_pool) != VK_SUCCESS) {
-        return false;
+    vkResult = vkCreateCommandPool(vkDevice, &vkCommandPoolCreateInfo, nullptr, &vkCommandPool);
+
+    if (vkResult != VK_SUCCESS) {
+        return videobackendResult::createWithError("Unable to create command pool", vkResult);
     }
 
     VkCommandBufferAllocateInfo vkCommandBufferAllocateInfo;
     vkCommandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     vkCommandBufferAllocateInfo.pNext = nullptr;
-    vkCommandBufferAllocateInfo.commandPool = command_pool;
+    vkCommandBufferAllocateInfo.commandPool = vkCommandPool;
     vkCommandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     vkCommandBufferAllocateInfo.commandBufferCount = 1;
 
-    if (vkAllocateCommandBuffers(vkDevice, &vkCommandBufferAllocateInfo, &emulationCommandBuffer) != VK_SUCCESS) {
-        return false;
+    vkResult = vkAllocateCommandBuffers(vkDevice, &vkCommandBufferAllocateInfo, &vkCommandBuffer);
+
+    if (vkResult != VK_SUCCESS) {
+        return videobackendResult::createWithError("Unable to allocate command buffer", vkResult);
     }
 
     VkCommandBufferBeginInfo begin_info;
@@ -474,56 +490,87 @@ bool glfwvulkan::registerImageBufferCommands(unsigned short width_t, unsigned sh
     begin_info.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
     begin_info.pInheritanceInfo = nullptr;
 
-    if (vkBeginCommandBuffer(emulationCommandBuffer, &begin_info) != VK_SUCCESS) {
-        return false;
+    vkResult = vkBeginCommandBuffer(vkCommandBuffer, &begin_info);
+
+    if (vkResult != VK_SUCCESS) {
+        return videobackendResult::createWithError("Unable to being command buffer", vkResult);
     }
 
-    VkImageSubresourceRange subresource_range;
-    subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    subresource_range.baseMipLevel = 0;
-    subresource_range.levelCount = 1;
-    subresource_range.baseArrayLayer = 0;
-    subresource_range.layerCount = 1;
+    return videobackendResult::createSuccessful();
+}
 
-    VkImageSubresourceLayers subresource;
-    subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    subresource.mipLevel = 0;
-    subresource.baseArrayLayer = 0;
-    subresource.layerCount = 1;
+videobackendResult *glfwvulkan::registerImageBufferCommands(unsigned short width_t, unsigned short height_t) {
+    VkResult vkResult;
 
-    VkBufferMemoryBarrier buffer_barrier;
-    buffer_barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    buffer_barrier.pNext = nullptr;
-    buffer_barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    buffer_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    buffer_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    buffer_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    buffer_barrier.buffer = emulationPixelBuffer;
-    buffer_barrier.offset = 0;
-    buffer_barrier.size = emulationPixelBufferSize;
+    initializeCommandBuffer(emulationCommandBuffer);
 
-    VkImageMemoryBarrier copy_barrier;
-    copy_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    copy_barrier.pNext = nullptr;
-    copy_barrier.srcAccessMask = 0;
-    copy_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    copy_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    copy_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    copy_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    copy_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    copy_barrier.image = emulationPixelImage;
-    copy_barrier.subresourceRange = subresource_range;
+    VkImageSubresourceRange vkImageSubresourceRange;
+    vkImageSubresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    vkImageSubresourceRange.baseMipLevel = 0;
+    vkImageSubresourceRange.levelCount = 1;
+    vkImageSubresourceRange.baseArrayLayer = 0;
+    vkImageSubresourceRange.layerCount = 1;
 
-    pipeline_barrier(emulationCommandBuffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, {},
-                     {buffer_barrier}, {copy_barrier});
+    VkImageSubresourceLayers vkImageSubresourceLayers;
+    vkImageSubresourceLayers.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    vkImageSubresourceLayers.mipLevel = 0;
+    vkImageSubresourceLayers.baseArrayLayer = 0;
+    vkImageSubresourceLayers.layerCount = 1;
 
-    VkBufferImageCopy image_copy;
-    image_copy.bufferOffset = 0;
-    image_copy.bufferRowLength = 0;
-    image_copy.bufferImageHeight = 0;
-    image_copy.imageSubresource = subresource;
-    image_copy.imageOffset = {};
-    image_copy.imageExtent = {width_t, height_t, 1};
+    VkBufferMemoryBarrier vkBufferMemoryBarrier;
+    vkBufferMemoryBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    vkBufferMemoryBarrier.pNext = nullptr;
+    vkBufferMemoryBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+    vkBufferMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    vkBufferMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    vkBufferMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    vkBufferMemoryBarrier.buffer = emulationPixelBuffer;
+    vkBufferMemoryBarrier.offset = 0;
+    vkBufferMemoryBarrier.size = emulationPixelBufferSize;
+
+    VkImageMemoryBarrier vkImageMemoryBarrierScaledPixelImage;
+    vkImageMemoryBarrierScaledPixelImage.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    vkImageMemoryBarrierScaledPixelImage.pNext = nullptr;
+    vkImageMemoryBarrierScaledPixelImage.srcAccessMask = 0;
+    vkImageMemoryBarrierScaledPixelImage.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vkImageMemoryBarrierScaledPixelImage.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkImageMemoryBarrierScaledPixelImage.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    vkImageMemoryBarrierScaledPixelImage.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    vkImageMemoryBarrierScaledPixelImage.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    vkImageMemoryBarrierScaledPixelImage.image = emulationScaledPixelImage;
+    vkImageMemoryBarrierScaledPixelImage.subresourceRange = vkImageSubresourceRange;
+
+    VkImageMemoryBarrier vkImageMemoryBarrierPixelImage;
+    vkImageMemoryBarrierPixelImage.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    vkImageMemoryBarrierPixelImage.pNext = nullptr;
+    vkImageMemoryBarrierPixelImage.srcAccessMask = 0;
+    vkImageMemoryBarrierPixelImage.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vkImageMemoryBarrierPixelImage.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    vkImageMemoryBarrierPixelImage.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    vkImageMemoryBarrierPixelImage.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    vkImageMemoryBarrierPixelImage.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    vkImageMemoryBarrierPixelImage.image = emulationPixelImage;
+    vkImageMemoryBarrierPixelImage.subresourceRange = vkImageSubresourceRange;
+
+    createPipelineBarrier(
+            emulationCommandBuffer,
+            VK_PIPELINE_STAGE_HOST_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            {},
+            {vkBufferMemoryBarrier},
+            {
+                    vkImageMemoryBarrierScaledPixelImage,
+                    vkImageMemoryBarrierPixelImage
+            }
+    );
+
+    VkBufferImageCopy vkBufferImageCopy;
+    vkBufferImageCopy.bufferOffset = 0;
+    vkBufferImageCopy.bufferRowLength = 0;
+    vkBufferImageCopy.bufferImageHeight = 0;
+    vkBufferImageCopy.imageSubresource = vkImageSubresourceLayers;
+    vkBufferImageCopy.imageOffset = {};
+    vkBufferImageCopy.imageExtent = {width_t, height_t, 1};
 
     vkCmdCopyBufferToImage(
             emulationCommandBuffer,
@@ -531,38 +578,68 @@ bool glfwvulkan::registerImageBufferCommands(unsigned short width_t, unsigned sh
             emulationPixelImage,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1,
-            &image_copy
+            &vkBufferImageCopy
     );
 
-    VkImageMemoryBarrier blit_barrier;
-    blit_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    blit_barrier.pNext = nullptr;
-    blit_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    blit_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    blit_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    blit_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    blit_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    blit_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    blit_barrier.image = emulationPixelImage;
-    blit_barrier.subresourceRange = subresource_range;
+    VkImageMemoryBarrier vkImageMemoryBarrierBlitPixelImage;
+    vkImageMemoryBarrierBlitPixelImage.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    vkImageMemoryBarrierBlitPixelImage.pNext = nullptr;
+    vkImageMemoryBarrierBlitPixelImage.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vkImageMemoryBarrierBlitPixelImage.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    vkImageMemoryBarrierBlitPixelImage.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    vkImageMemoryBarrierBlitPixelImage.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    vkImageMemoryBarrierBlitPixelImage.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    vkImageMemoryBarrierBlitPixelImage.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    vkImageMemoryBarrierBlitPixelImage.image = emulationPixelImage;
+    vkImageMemoryBarrierBlitPixelImage.subresourceRange = vkImageSubresourceRange;
 
-    pipeline_barrier(emulationCommandBuffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, {}, {},
-                     {blit_barrier});
+    createPipelineBarrier(
+            emulationCommandBuffer,
+            VK_PIPELINE_STAGE_HOST_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            {},
+            {},
+            {vkImageMemoryBarrierBlitPixelImage}
+    );
 
-    return !(vkEndCommandBuffer(emulationCommandBuffer) != VK_SUCCESS);
+    VkImageBlit vkImageBlit;
+    vkImageBlit.srcSubresource = vkImageSubresourceLayers;
+    vkImageBlit.srcOffsets[0] = {};
+    vkImageBlit.srcOffsets[1] = {width_t, height_t, 1};
+    vkImageBlit.dstSubresource = vkImageSubresourceLayers;
+    vkImageBlit.dstOffsets[0] = {};
+    vkImageBlit.dstOffsets[1] = {emulationWindowWidth, emulationWindowHeight, 1};
 
+    vkCmdBlitImage(
+            emulationCommandBuffer,
+            emulationPixelImage,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            emulationScaledPixelImage,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1,
+            &vkImageBlit,
+            VK_FILTER_NEAREST
+    );
+
+    vkResult = vkEndCommandBuffer(emulationCommandBuffer);
+
+    if (vkResult != VK_SUCCESS) {
+        return videobackendResult::createWithError("Unable to finish command buffer", vkResult);
+    }
+
+    return videobackendResult::createSuccessful();
 }
 
-void glfwvulkan::init(int t_width, int t_height, const char *t_appName) {
-    width = t_width;
-    height = t_height;
-    appName = t_appName;
+void glfwvulkan::init(int width, int height, const char *appName_t) {
+    windowWidth = width;
+    windowHeight = height;
+    appName = appName_t;
 }
 
-void glfwvulkan::glfwResizeCallback(GLFWwindow *, int width_t, int height_t) {
+void glfwvulkan::glfwResizeCallback(GLFWwindow *, int width, int height) {
     swapChainRebuild = true;
-    swapChainResizeWidth = width_t;
-    swapChainResizeHeight = height_t;
+    swapChainResizeWidth = width;
+    swapChainResizeHeight = height;
 }
 
 videobackendResult *glfwvulkan::imgUiFrameRender() {
@@ -739,7 +816,7 @@ bool glfwvulkan::createEmulationPixelBuffer(unsigned short width_t, unsigned sho
 
 }
 
-bool glfwvulkan::createImage(VkImage &image, unsigned short width_t, unsigned short height_t) {
+bool glfwvulkan::createImage(unsigned short width_t, unsigned short height_t) {
     VkImageCreateInfo vkImageCreateInfo;
     vkImageCreateInfo.pNext = nullptr;
     vkImageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -757,7 +834,7 @@ bool glfwvulkan::createImage(VkImage &image, unsigned short width_t, unsigned sh
     vkImageCreateInfo.pQueueFamilyIndices = nullptr;
     vkImageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    VkResult result = vkCreateImage(vkDevice, &vkImageCreateInfo, nullptr, &image);
+    VkResult result = vkCreateImage(vkDevice, &vkImageCreateInfo, nullptr, &emulationPixelImage);
 
     if (result < 0) {
         spdlog::error("failed to create image: {}", result);
@@ -768,8 +845,77 @@ bool glfwvulkan::createImage(VkImage &image, unsigned short width_t, unsigned sh
     return true;
 }
 
+bool glfwvulkan::createEmulationPixelScaledImage(unsigned short width_t, unsigned short height_t) {
+    spdlog::info("Creating new emulated scaled image: {}x{}", width_t, height_t);
+
+    VkImageCreateInfo vkImageCreateInfo;
+    vkImageCreateInfo.pNext = nullptr;
+    vkImageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    vkImageCreateInfo.flags = 0;
+    vkImageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+    vkImageCreateInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
+    vkImageCreateInfo.extent = {width_t, height_t, 1};
+    vkImageCreateInfo.mipLevels = 1;
+    vkImageCreateInfo.arrayLayers = 1;
+    vkImageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    vkImageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    vkImageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    vkImageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    vkImageCreateInfo.queueFamilyIndexCount = 0;
+    vkImageCreateInfo.pQueueFamilyIndices = nullptr;
+    vkImageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VkResult result = vkCreateImage(vkDevice, &vkImageCreateInfo, nullptr, &emulationScaledPixelImage);
+
+    if (result < 0) {
+        spdlog::error("failed to create image: {}", result);
+        throw std::runtime_error("ERROR!");
+        return false;
+    }
+
+    VkMemoryRequirements vkMemoryRequirements;
+    vkGetBufferMemoryRequirements(vkDevice, emulationPixelBuffer, &vkMemoryRequirements);
+
+    VkMemoryAllocateInfo vkMemoryAllocateInfo;
+    vkMemoryAllocateInfo.pNext = nullptr;
+    vkMemoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    vkMemoryAllocateInfo.allocationSize = vkMemoryRequirements.size;
+    vkMemoryAllocateInfo.memoryTypeIndex = findMemoryType(vkMemoryRequirements.memoryTypeBits,
+                                                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    if (vkAllocateMemory(vkDevice, &vkMemoryAllocateInfo, nullptr, &emulationPixelScaledMemoryBuffer) != VK_SUCCESS) {
+        return false;
+    }
+
+    if (vkBindImageMemory(vkDevice, emulationScaledPixelImage, emulationPixelScaledMemoryBuffer, 0) != VK_SUCCESS) {
+        return false;
+    }
+
+    VkImageViewCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    createInfo.image = emulationScaledPixelImage;
+    createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    createInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
+    createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    createInfo.subresourceRange.baseMipLevel = 0;
+    createInfo.subresourceRange.levelCount = 1;
+    createInfo.subresourceRange.baseArrayLayer = 0;
+    createInfo.subresourceRange.layerCount = 1;
+
+    if (vkCreateImageView(vkDevice, &createInfo, nullptr, &emulationPixelImageView) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create image views!");
+    }
+
+    return true;
+}
+
 bool glfwvulkan::createEmulationPixelImage(unsigned short width_t, unsigned short height_t) {
-    createImage(emulationPixelImage, width_t, height_t);
+    createImage(width_t, height_t);
 
     VkMemoryRequirements vkMemoryRequirements;
     vkGetBufferMemoryRequirements(vkDevice, emulationPixelBuffer, &vkMemoryRequirements);
@@ -790,29 +936,10 @@ bool glfwvulkan::createEmulationPixelImage(unsigned short width_t, unsigned shor
         return false;
     }
 
-    VkImageViewCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    createInfo.image = emulationPixelImage;
-    createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    createInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
-    createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-    createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-    createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-    createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-    createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    createInfo.subresourceRange.baseMipLevel = 0;
-    createInfo.subresourceRange.levelCount = 1;
-    createInfo.subresourceRange.baseArrayLayer = 0;
-    createInfo.subresourceRange.layerCount = 1;
-
-    if (vkCreateImageView(vkDevice, &createInfo, nullptr, &emulationPixelImageView) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create image views!");
-    }
-
     VkSamplerCreateInfo vkSamplerCreateInfo{};
     vkSamplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    vkSamplerCreateInfo.magFilter = VK_FILTER_LINEAR;
-    vkSamplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+    vkSamplerCreateInfo.magFilter = VK_FILTER_NEAREST;
+    vkSamplerCreateInfo.minFilter = VK_FILTER_NEAREST;
     vkSamplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     vkSamplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     vkSamplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
@@ -821,7 +948,7 @@ bool glfwvulkan::createEmulationPixelImage(unsigned short width_t, unsigned shor
     vkSamplerCreateInfo.unnormalizedCoordinates = VK_FALSE;
     vkSamplerCreateInfo.compareEnable = VK_FALSE;
     vkSamplerCreateInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-    vkSamplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    vkSamplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 
     if (vkCreateSampler(vkDevice, &vkSamplerCreateInfo, nullptr, &emulationPixelImageSampler) != VK_SUCCESS) {
         throw std::runtime_error("failed to create texture sampler!");

@@ -62,6 +62,8 @@ public:
     bool handlexD000(unsigned short opcode);
 
     bool handlexE000(unsigned short opcode);
+
+    bool executeOpcode(unsigned short opcode);
 };
 
 

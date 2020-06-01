@@ -28,9 +28,8 @@ void cpu::init(mem *memory_t, class gpu *gpu_t) {
     spdlog::get("c8")->info("Reset CPU. Program counter is: {0:x}", program_counter);
 }
 
-bool cpu::cycle() {
-    unsigned short opcode = (memory->read(program_counter) << 8u) + memory->read(program_counter + 1u);
-
+bool cpu::executeOpcode(unsigned short opcode)
+{
     switch (opcode & 0xF000u) {
         case 0x0000:
             return handlex0000(opcode & 0x000Fu);
@@ -82,6 +81,20 @@ bool cpu::cycle() {
     }
 
     return false;
+}
+
+bool cpu::cycle() {
+    unsigned short opcode = (memory->read(program_counter) << 8u) + memory->read(program_counter + 1u);
+
+    auto result = executeOpcode(opcode);
+
+    if (delay_timer > 0)
+        --delay_timer;
+
+    if (sound_timer > 0)
+        --sound_timer;
+
+    return result;
 }
 
 bool cpu::handlex0000(unsigned short opcode) {
@@ -139,7 +152,7 @@ bool cpu::handlex4000(unsigned short opcode) {
 }
 
 bool cpu::handlex5000(unsigned short opcode) {
-    if (video_register[(opcode & 0x0F00u) >> 8u] == (opcode & 0x00FFu)) {
+    if (video_register[(opcode & 0x0F00u) >> 8u] == video_register[(opcode & 0x00F0u) >> 4u]) {
         program_counter += 4;
     } else {
         program_counter += 2;
@@ -167,15 +180,19 @@ bool cpu::handlex8000(unsigned short opcode) {
 
         case 0x0000:
             video_register[(opcode & 0x0F00u) >> 8u] = video_register[(opcode & 0x00F0u) >> 4u];
+            break;
 
         case 0x0001:
             video_register[(opcode & 0x0F00u) >> 8u] |= video_register[(opcode & 0x00F0u) >> 4u];
+            break;
 
         case 0x0002:
             video_register[(opcode & 0x0F00u) >> 8u] &= video_register[(opcode & 0x00F0u) >> 4u];
+            break;
 
         case 0x0003:
             video_register[(opcode & 0x0F00u) >> 8u] ^= video_register[(opcode & 0x00F0u) >> 4u];
+            break;
 
         case 0x0004:
             video_register[(opcode & 0x0F00u) >> 8u] += video_register[(opcode & 0x00F0u) >> 4u];
@@ -185,6 +202,7 @@ bool cpu::handlex8000(unsigned short opcode) {
             } else {
                 video_register[0xF] = 0;
             }
+            break;
 
         case 0x0005:
             if (video_register[(opcode & 0x00F0u) >> 4u] > video_register[(opcode & 0x0F00u) >> 8u]) {
@@ -194,10 +212,12 @@ bool cpu::handlex8000(unsigned short opcode) {
             }
 
             video_register[(opcode & 0x0F00u) >> 8u] -= video_register[(opcode & 0x00F0u) >> 4u];
+            break;
 
         case 0x0006:
             video_register[0xF] = video_register[(opcode & 0x0F00u) >> 8u] & 0x1u;
             video_register[(opcode & 0x0F00u) >> 8u] >>= 1u;
+            break;
 
         case 0x0007:
             if (video_register[(opcode & 0x0F00u) >> 8u] > video_register[(opcode & 0x00F0u) >> 4u]) {
@@ -208,10 +228,12 @@ bool cpu::handlex8000(unsigned short opcode) {
 
             video_register[(opcode & 0x0F00u) >> 8u] =
                     video_register[(opcode & 0x00F0u) >> 4u] - video_register[(opcode & 0x0F00u) >> 8u];
+            break;
 
         case 0x000E:
             video_register[0xF] = video_register[(opcode & 0x0F00u) >> 8u] >> 7u;
             video_register[(opcode & 0x0F00u) >> 8u] <<= 1u;
+            break;
     }
 
     program_counter += 2;
@@ -252,13 +274,13 @@ bool cpu::handlexD000(unsigned short opcode) {
     unsigned short x = video_register[(opcode & 0x0F00u) >> 8u];
     unsigned short y = video_register[(opcode & 0x00F0u) >> 4u];
     unsigned short height = opcode & 0x000Fu;
-    unsigned short pixel;
+    unsigned short sprite;
 
     video_register[0xF] = 0;
-    for (int yline = 0; yline < height; yline++) {
-        pixel = memory->read(index_register + yline);
+    for (unsigned short yline = 0; yline < height && (yline + y) < 32; yline++) {
+        sprite = memory->read(index_register + yline);
         for (unsigned short xline = 0; xline < 8; xline++) {
-            if ((pixel & (0x80u >> xline)) != 0) {
+            if (((sprite >> (7u - xline)) & 1u) == 1u) {
                 if (gpu->read((x + xline + ((y + yline) * 64))) == 1) {
                     video_register[0xF] = 1;
                 }
