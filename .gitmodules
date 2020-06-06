@@ -1,3 +1,6 @@
 [submodule "vendor/glfw"]
 	path = vendor/glfw
 	url = https://github.com/glfw/glfw
+[submodule "vendor/imgui-filebrowser"]
+	path = vendor/imgui-filebrowser
+	url = https://github.com/AirGuanZ/imgui-filebrowser.git

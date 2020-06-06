@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.10)
 project(chippuhachi)
 
 enable_testing()
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_OSX_DEPLOYMENT_TARGET 10.15)
 
 set(CMAKE_MACOSX_RPATH TRUE)
 set(CMAKE_SKIP_BUILD_RPATH FALSE)

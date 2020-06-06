@@ -7,7 +7,6 @@
 #include "videobackend.h"
 #include "imgui_impl_vulkan.h"
 #include "../system.h"
-#include "vertex.h"
 
 class glfwvulkan : public videobackend {
     const int EMULATION_WINDOW_PADDING = 30;

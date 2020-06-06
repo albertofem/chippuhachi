@@ -1,4 +1,5 @@
 #define GLFW_INCLUDE_VULKAN
+#define IMGUI_UNLIMITED_FRAME_RATE
 
 #include "glfwvulkan.h"
 #include <vulkan/vulkan.h>
@@ -9,23 +10,8 @@
 #include <valarray>
 #include "imgui_impl_vulkan.h"
 #include "imgui_impl_glfw.h"
-#include "vertex.h"
+#include "../../vendor/imgui-filebrowser/imfilebrowser.h"
 #include <glm/glm.hpp>
-
-static VKAPI_ATTR VkBool32 VKAPI_CALL
-vkDebugReportFn(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location,
-                int32_t messageCode, const char *pLayerPrefix, const char *pMessage, void *pUserData) {
-    (void) flags;
-    (void) object;
-    (void) location;
-    (void) messageCode;
-    (void) pUserData;
-    (void) pLayerPrefix;
-
-    spdlog::debug("Vulkan debug: Object Type: {} - Message: {}", objectType, pMessage);
-
-    return VK_FALSE;
-}
 
 // needs to live outside the class because of
 // https://stackoverflow.com/questions/7852101/c-lambda-with-captures-as-a-function-pointer
@@ -125,6 +111,8 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
         return videobackendResult::createWithError("Error no WSI support on physical vkDevice 0");
     }
 
+    glfwSwapInterval(0);
+
     const VkFormat requestSurfaceImageFormat[] = {
             VK_FORMAT_B8G8R8A8_UNORM,
             VK_FORMAT_R8G8B8A8_UNORM,
@@ -208,6 +196,10 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
         return videobackendResult::createWithError("Unable to create pixel image");
     }
 
+    ImGui::FileBrowser fileDialog;
+
+    fileDialog.SetTitle("Pick a rom");
+
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
@@ -237,20 +229,27 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("Rom")) {
                 if (ImGui::MenuItem("Open..", "Ctrl+O")) {
-                    // TODO: prompt to pick rom, hardcoded for now
-                    spdlog::info("Opening rom");
-                    emulatedSystem->loadRom("tests/roms/invaders.rom");
-                    emulatedSystem->start();
-
-                    imgUiTexture = ImGui_ImplVulkan_AddTexture(emulationPixelImageSampler,
-                                                               emulationPixelImageView,
-                                                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                    fileDialog.Open();
                 }
                 ImGui::EndMenu();
             }
             ImGui::EndMenuBar();
         }
         ImGui::End();
+
+        fileDialog.Display();
+
+        if(fileDialog.HasSelected())
+        {
+            spdlog::info("Opening rom");
+            emulatedSystem->loadRom(fileDialog.GetSelected().c_str());
+            emulatedSystem->start();
+
+            imgUiTexture = ImGui_ImplVulkan_AddTexture(emulationPixelImageSampler,
+                                                       emulationPixelImageView,
+                                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+            fileDialog.ClearSelected();
+        }
 
         ImGui::Begin("Emulation");
         {
@@ -273,9 +272,8 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
                 for (int y = 0; y < emulatedSystem->renderHeight(); ++y) {
                     for (int x = 0; x < emulatedSystem->renderWidth(); ++x) {
                         if (pixels[(y * emulatedSystem->renderWidth()) + x]) {
-                            auto *pixel =
-                                    static_cast<int *>(emulationPixelBufferData) + (y * emulatedSystem->renderWidth()) +
-                                    x;
+                            auto *pixel = static_cast<int *>(emulationPixelBufferData)
+                                    + (y * emulatedSystem->renderWidth()) + x;
                             *pixel = 0xFFFFFFFF;
                         }
                     }
@@ -294,6 +292,7 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
         }
         ImGui::End();
         ImGui::Render();
+
 
         memcpy(&imgUiWindowPtr->ClearValue.color.float32[0], &CLEAR_COLOR, 4 * sizeof(float));
 
