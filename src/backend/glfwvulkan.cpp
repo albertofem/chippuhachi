@@ -24,6 +24,8 @@ static void imgUiCheckError(VkResult vkResult) {
 }
 
 videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
+    emulatedSystemPtr = emulatedSystem;
+
     glfwInit();
 
     if (glfwVulkanSupported() == GLFW_FALSE) {
@@ -53,7 +55,7 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
         return videobackendResult::createWithError("Unable to enumerate Vulkan physical devices", vkResult);
     }
 
-    std::vector<VkPhysicalDevice> gpus(gpuCount);
+    std::vector <VkPhysicalDevice> gpus(gpuCount);
     vkResult = vkEnumeratePhysicalDevices(vkInstance, &gpuCount, gpus.data());
 
     if (vkResult < 0) {
@@ -92,6 +94,31 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
     glfwSetFramebufferSizeCallback(window, [](GLFWwindow *window, int h, int w) {
         auto &self = *static_cast<glfwvulkan *>(glfwGetWindowUserPointer(window));
         self.glfwResizeCallback(window, h, w);
+    });
+
+    glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
+        auto &self = *static_cast<glfwvulkan *>(glfwGetWindowUserPointer(window));
+
+        if (self.emulationFocus == false)
+        {
+            return;
+        }
+
+        if(self.GLFW_KEYMAP.find(key) != self.GLFW_KEYMAP.end())
+        {
+            auto mappedKey = self.GLFW_KEYMAP[key];
+
+            int value;
+
+            if (action == GLFW_PRESS || action == GLFW_REPEAT)
+            {
+                value = 1;
+            } else {
+                value = 0;
+            }
+
+            self.emulatedSystemPtr->keyPressed(mappedKey, value);
+        }
     });
 
     vkResult = glfwCreateWindowSurface(vkInstance, window, vkAllocator, &vkSurfaceKhr);
@@ -239,8 +266,7 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
 
         fileDialog.Display();
 
-        if(fileDialog.HasSelected())
-        {
+        if (fileDialog.HasSelected()) {
             spdlog::info("Opening rom");
             emulatedSystem->loadRom(fileDialog.GetSelected().c_str());
             emulatedSystem->start();
@@ -264,7 +290,9 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
                 registerImageBufferCommands(emulatedSystem->renderWidth(), emulatedSystem->renderHeight());
             }
 
-            if (emulatedSystem->step()) {
+            emulationFocus = ImGui::IsWindowFocused();
+
+            if (emulationFocus && emulatedSystem->step()) {
                 auto pixels = emulatedSystem->pixels();
 
                 memset(emulationPixelBufferData, 0, emulationPixelBufferSize);
@@ -273,7 +301,7 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
                     for (int x = 0; x < emulatedSystem->renderWidth(); ++x) {
                         if (pixels[(y * emulatedSystem->renderWidth()) + x]) {
                             auto *pixel = static_cast<int *>(emulationPixelBufferData)
-                                    + (y * emulatedSystem->renderWidth()) + x;
+                                          + (y * emulatedSystem->renderWidth()) + x;
                             *pixel = 0xFFFFFFFF;
                         }
                     }
@@ -284,8 +312,8 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
                 ImGui::Image(
                         imgUiTexture,
                         ImVec2(
-                                (float) (currentWidth-EMULATION_WINDOW_PADDING+10),
-                                (float) (currentHeight-EMULATION_WINDOW_PADDING-12)
+                                (float) (currentWidth - EMULATION_WINDOW_PADDING + 10),
+                                (float) (currentHeight - EMULATION_WINDOW_PADDING - 12)
                         )
                 );
             }

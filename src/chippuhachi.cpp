@@ -60,3 +60,7 @@ unsigned short chippuhachi::renderHeight() {
 std::vector<unsigned short> chippuhachi::pixels() {
     return gpu->pixels();
 }
+
+void chippuhachi::keyPressed(int key, int value) {
+    cpu->pressKey(key, value);
+}

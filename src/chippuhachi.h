@@ -29,6 +29,8 @@ public:
     unsigned short renderHeight() override;
 
     std::vector<unsigned short> pixels() override;
+
+    void keyPressed(int key, int value) override;
 };
 
 

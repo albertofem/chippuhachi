@@ -11,7 +11,6 @@ class cpu {
     static unsigned short const STACK_SIZE = 16;
     static unsigned short const KEYPAD_MEMORY_SIZE = 16;
 
-    unsigned short op_code;
     unsigned char video_register[VIDEO_REGISTER_SIZE];
     unsigned short index_register;
     unsigned short program_counter;
@@ -30,6 +29,8 @@ class cpu {
     bool handlex0000(unsigned short opcode);
 public:
     void init(class mem* memory, class gpu* gpu_t);
+
+    void pressKey(int key, int value);
 
     bool cycle();
 

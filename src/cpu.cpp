@@ -6,7 +6,6 @@ void cpu::init(mem *memory_t, class gpu *gpu_t) {
     gpu = gpu_t;
 
     program_counter = 0x200;
-    op_code = 0;
     stack_pointer = 0;
     index_register = 0;
 
@@ -328,17 +327,10 @@ bool cpu::handlexF000(unsigned short opcode) {
             break;
 
         case 0x000A: {
-            bool key_pressed = false;
-
             for (int i = 0; i < 16; ++i) {
                 if (keypad[i] != 0) {
                     video_register[(opcode & 0x0F00u) >> 8u] = i;
-                    key_pressed = true;
                 }
-            }
-
-            if (!key_pressed) {
-                return false;
             }
 
             program_counter += 2;
@@ -400,8 +392,13 @@ bool cpu::handlexF000(unsigned short opcode) {
             break;
 
         default:
-            spdlog::error("Unknown opcode [0xF000]: 0x%X\n", opcode);
+            spdlog::error("Unknown opcode: 0x{0:b} - 0x{0:x}", opcode, opcode);
     }
 
     return false;
+}
+
+void cpu::pressKey(int key, int value) {
+    spdlog::info("Pressing key {} with value {}", key, value);
+    keypad[key] = value;
 }

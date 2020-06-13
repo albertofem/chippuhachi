@@ -4,11 +4,31 @@
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 #include <vector>
+#include <map>
 #include "videobackend.h"
 #include "imgui_impl_vulkan.h"
 #include "../system.h"
 
 class glfwvulkan : public videobackend {
+    std::map<int, char> GLFW_KEYMAP = {
+            {GLFW_KEY_1, 0x1},
+            {GLFW_KEY_2, 0x2},
+            {GLFW_KEY_3, 0x3},
+            {GLFW_KEY_4, 0xC},
+            {GLFW_KEY_Q, 0x4},
+            {GLFW_KEY_W, 0x5},
+            {GLFW_KEY_E, 0x6},
+            {GLFW_KEY_R, 0xD},
+            {GLFW_KEY_A, 0x7},
+            {GLFW_KEY_S, 0x8},
+            {GLFW_KEY_D, 0x9},
+            {GLFW_KEY_F, 0xE},
+            {GLFW_KEY_Y, 0xA},
+            {GLFW_KEY_X, 0x0},
+            {GLFW_KEY_C, 0xB},
+            {GLFW_KEY_V, 0xF}
+    };
+
     const int EMULATION_WINDOW_PADDING = 30;
     const int MIN_IMAGE_COUNT = 2;
     const float VULKAN_QUEUE_PRIORITIES[1]{
@@ -79,6 +99,10 @@ class glfwvulkan : public videobackend {
     VkImageView emulationPixelImageView;
     VkSampler emulationPixelImageSampler;
 
+    // emulated system
+    class system* emulatedSystemPtr;
+    bool emulationFocus = false;
+
 public:
     videobackendResult *run(class system *system) override;
 
@@ -94,7 +118,7 @@ public:
 
     bool createEmulationPixelScaledImage(unsigned short width_t, unsigned short height_t);
 
-    videobackendResult * registerImageBufferCommands(unsigned short width_t, unsigned short height_t);
+    videobackendResult *registerImageBufferCommands(unsigned short width_t, unsigned short height_t);
 
     bool createImage(unsigned short width_t, unsigned short height_t);
 
@@ -111,12 +135,12 @@ public:
     static ImFont *loadImGuiJapaneseFont(ImGuiIO &io);
 
     static void createPipelineBarrier(VkCommandBuffer
-                               commandBuffer,
-                               VkPipelineStageFlags srcStage, VkPipelineStageFlags
-                               dstStage,
-                               std::vector<VkMemoryBarrier> memoryBarries, std::vector<VkBufferMemoryBarrier>
-                               bufferBarries,
-                               std::vector<VkImageMemoryBarrier> imageBarriers
+                                      commandBuffer,
+                                      VkPipelineStageFlags srcStage, VkPipelineStageFlags
+                                      dstStage,
+                                      std::vector<VkMemoryBarrier> memoryBarries, std::vector<VkBufferMemoryBarrier>
+                                      bufferBarries,
+                                      std::vector<VkImageMemoryBarrier> imageBarriers
     );
 
     videobackendResult *initializeCommandBuffer(VkCommandBuffer &vkCommandBuffer);

@@ -16,6 +16,8 @@ public:
     virtual unsigned short renderHeight() = 0;
 
     virtual std::vector<unsigned short> pixels() = 0;
+
+    virtual void keyPressed(int key, int value) = 0;
 };
 
 #endif
