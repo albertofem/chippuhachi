@@ -399,6 +399,5 @@ bool cpu::handlexF000(unsigned short opcode) {
 }
 
 void cpu::pressKey(int key, int value) {
-    spdlog::info("Pressing key {} with value {}", key, value);
     keypad[key] = value;
 }

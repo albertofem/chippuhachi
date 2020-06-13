@@ -99,7 +99,7 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
     glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
         auto &self = *static_cast<glfwvulkan *>(glfwGetWindowUserPointer(window));
 
-        if (self.emulationFocus == false)
+        if (!self.emulationFocus)
         {
             return;
         }
@@ -107,17 +107,7 @@ videobackendResult *glfwvulkan::run(class system *emulatedSystem) {
         if(self.GLFW_KEYMAP.find(key) != self.GLFW_KEYMAP.end())
         {
             auto mappedKey = self.GLFW_KEYMAP[key];
-
-            int value;
-
-            if (action == GLFW_PRESS || action == GLFW_REPEAT)
-            {
-                value = 1;
-            } else {
-                value = 0;
-            }
-
-            self.emulatedSystemPtr->keyPressed(mappedKey, value);
+            self.emulatedSystemPtr->keyPressed(mappedKey, (action == GLFW_PRESS || action == GLFW_REPEAT));
         }
     });
 
