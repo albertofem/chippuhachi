@@ -8,7 +8,7 @@ add_library(${TARGET_NAME} chippuhachi.cpp chippuhachi.h cpu.cpp cpu.h mem.cpp m
 
 target_include_directories(${TARGET_NAME} INTERFACE ./)
 
-find_package(vulkan REQUIRED)
+find_package(Vulkan REQUIRED)
 set(CMAKE_MACOSX_RPATH TRUE)
 
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)

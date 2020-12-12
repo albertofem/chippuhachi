@@ -52,3 +52,7 @@ _deps
 bin/
 imgui.ini
 *.cbp
+venv/
+conanbuildinfo*
+graph_info*
+conaninfo.txt

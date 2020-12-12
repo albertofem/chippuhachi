@@ -8,6 +8,7 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET 10.15)
 set(CMAKE_MACOSX_RPATH TRUE)
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive" )
 
 include(build/conanbuildinfo.cmake)
 conan_basic_setup()
@@ -17,7 +18,7 @@ add_subdirectory(tests)
 
 add_executable(chippuhachi src/main.cpp)
 
-find_package(vulkan REQUIRED)
+find_package(Vulkan REQUIRED)
 
 target_link_libraries(chippuhachi libchippuhachi Vulkan::Vulkan)
 

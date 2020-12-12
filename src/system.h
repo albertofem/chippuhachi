@@ -1,6 +1,8 @@
 #ifndef CHIPPUHACHI_SYSTEM_H
 #define CHIPPUHACHI_SYSTEM_H
 
+#include <vector>
+
 class system {
 public:
     virtual void init() = 0;

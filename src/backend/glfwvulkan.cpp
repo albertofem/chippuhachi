@@ -403,7 +403,7 @@ void glfwvulkan::initializeQueueFamily() {
     uint32_t queueFamilyCount;
     vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, &queueFamilyCount, nullptr);
 
-    std::__1::vector<VkQueueFamilyProperties> familyProperties(queueFamilyCount);
+    std::vector<VkQueueFamilyProperties> familyProperties(queueFamilyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, &queueFamilyCount, familyProperties.data());
 
     for (uint32_t i = 0; i < queueFamilyCount; ++i) {

@@ -23,7 +23,7 @@ bool mem::loadRom(const char *file_path) {
     FILE *rom = fopen(file_path, "rb");
 
     if (rom == nullptr) {
-        std::cerr << "Unable to open rom: " << strerror(errno) << std::endl;
+        std::cerr << "Unable to open rom: " << errno << std::endl;
         return false;
     }
 
@@ -35,14 +35,14 @@ bool mem::loadRom(const char *file_path) {
     char *rom_buffer = (char *) malloc(sizeof(char) * rom_size);
 
     if (rom_buffer == nullptr) {
-        std::cerr << "Failed to allocate memory: " << strerror(errno) << std::endl;
+        std::cerr << "Failed to allocate memory: " << errno << std::endl;
         return false;
     }
 
     size_t result = fread(rom_buffer, sizeof(char), (size_t) rom_size, rom);
 
     if (result != rom_size) {
-        std::cerr << "Failed to read rom: " << strerror(errno) << std::endl;
+        std::cerr << "Failed to read rom: " << errno << std::endl;
         return false;
     }
 
